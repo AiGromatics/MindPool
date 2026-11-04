@@ -132,6 +132,34 @@ npm run package     # → mindpool-<version>.vsix
 
 Press **F5** to launch an Extension Development Host.
 
+### Commit messages and releases
+
+Commit messages follow [Conventional Commits](https://www.conventionalcommits.org). The release
+script reads them to choose the next version:
+
+| Commit                                        | Release |
+|-----------------------------------------------|---------|
+| `feat: …`                                     | minor   |
+| `fix: …`, `perf: …`, `revert: …`              | patch   |
+| `feat!: …` or a `BREAKING CHANGE:` footer     | major   |
+| `docs:`, `test:`, `ci:`, `chore:`, `build:`, `style:`, `refactor:` | none |
+| any other message                             | patch if it changes shipped files (`src/` except tests, `media/`, `schemas/`, `package.json`), otherwise none |
+
+```bash
+npm run bump:check   # is a release needed, and which version? (changes nothing)
+npm run bump         # update package.json, package-lock.json and CHANGELOG.md, commit and tag vX.Y.Z
+git push --follow-tags
+npm run package
+```
+
+- A release is only made when something users get has changed. Docs and test commits on their
+  own never trigger one.
+- If you set the version in `package.json` by hand, that exact version is released.
+- `npm run bump -- --release-as minor` (or `2.0.0`) overrides the automatic choice.
+- `--no-git` only writes the files, and `--json` prints the result for CI.
+- The script refuses to release from a dirty working tree, a detached HEAD or a branch that is
+  behind its upstream. It never pushes.
+
 ### Architecture: one monolith
 
 `scripts/build.ts` bundles everything into **one file, `dist/main.cjs`**. The webview client is

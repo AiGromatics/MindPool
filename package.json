@@ -202,6 +202,8 @@
         "test:e2e": "node scripts/build.ts --e2e && node src/test/e2e/runE2E.ts",
         "test:all": "npm run typecheck && npm test && npm run test:e2e",
         "package": "vsce package --no-dependencies",
+        "bump:check": "node scripts/bump.ts",
+        "bump": "node scripts/bump.ts --apply",
         "vscode:prepublish": "npm run typecheck && npm run build"
     },
     "devDependencies": {

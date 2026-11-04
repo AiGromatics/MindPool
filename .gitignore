@@ -1,5 +1,39 @@
+# Dependencies and build output
 node_modules/
 dist/
 .vscode-test/
 *.vsix
+coverage/
+
+# Secrets: credentials must never reach this public repository.
+# (Marketplace publish tokens belong in `vsce login` or the VSCE_PAT variable, not in files.)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.keystore
+id_rsa*
+id_ed25519*
+.netrc
+# .npmrc files can hold registry auth tokens. Remove this line if you need a shared one.
+.npmrc
+secrets/
+*.secret
+*.secrets
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor: share the debug and build setup, keep personal settings local
+.vscode/*
+!.vscode/launch.json
+!.vscode/tasks.json
+!.vscode/extensions.json
+
+# OS
 .DS_Store
+Thumbs.db
