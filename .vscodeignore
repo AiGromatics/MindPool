@@ -1,0 +1,9 @@
+# Only the bundled monolith, the manifest, icons and schema ship in the .vsix
+**
+!dist/main.cjs
+!package.json
+!README.md
+!LICENSE
+!media/icon.png
+!media/mindpool.svg
+!schemas/skill.schema.json

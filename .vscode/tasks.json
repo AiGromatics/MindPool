@@ -1,0 +1,26 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "mindpool: build (dev)",
+            "type": "shell",
+            "command": "node scripts/build.ts --dev",
+            "group": { "kind": "build", "isDefault": true },
+            "problemMatcher": []
+        },
+        {
+            "label": "mindpool: watch",
+            "type": "npm",
+            "script": "start",
+            "isBackground": true,
+            "problemMatcher": []
+        },
+        {
+            "label": "mindpool: test",
+            "type": "npm",
+            "script": "test",
+            "group": "test",
+            "problemMatcher": []
+        }
+    ]
+}

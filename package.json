@@ -1,0 +1,215 @@
+{
+    "name": "mindpool",
+    "displayName": "MindPool",
+    "version": "1.0.0",
+    "description": "MindPool is a small tool to sync your team AI skills in one go, from a private Git repository.",
+    "publisher": "aigromatics",
+    "author": "AiGromatics",
+    "license": "GPL-3.0",
+    "icon": "media/icon.png",
+    "type": "module",
+    "main": "./dist/main.cjs",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/AiGromatics/MindPool.git"
+    },
+    "engines": {
+        "vscode": "^1.100.0",
+        "node": ">=22.18.0"
+    },
+    "categories": [
+        "AI",
+        "SCM Providers",
+        "Other"
+    ],
+    "keywords": [
+        "ai",
+        "skills",
+        "team",
+        "git",
+        "sync"
+    ],
+    "activationEvents": [
+        "onStartupFinished"
+    ],
+    "contributes": {
+        "viewsContainers": {
+            "activitybar": [
+                {
+                    "id": "mindpool",
+                    "title": "MindPool",
+                    "icon": "media/mindpool.svg"
+                }
+            ]
+        },
+        "views": {
+            "mindpool": [
+                {
+                    "type": "webview",
+                    "id": "mindpool.dashboard",
+                    "name": "Dashboard",
+                    "icon": "media/mindpool.svg"
+                }
+            ]
+        },
+        "commands": [
+            {
+                "command": "mindpool.sync",
+                "title": "Sync Now",
+                "category": "MindPool",
+                "icon": "$(sync)"
+            },
+            {
+                "command": "mindpool.selectFolder",
+                "title": "Select Pool Folder…",
+                "category": "MindPool",
+                "icon": "$(folder-opened)"
+            },
+            {
+                "command": "mindpool.pull",
+                "title": "Pull",
+                "category": "MindPool",
+                "icon": "$(cloud-download)"
+            },
+            {
+                "command": "mindpool.commit",
+                "title": "Commit Changes…",
+                "category": "MindPool",
+                "icon": "$(git-commit)"
+            },
+            {
+                "command": "mindpool.push",
+                "title": "Push",
+                "category": "MindPool",
+                "icon": "$(cloud-upload)"
+            },
+            {
+                "command": "mindpool.openInNewWindow",
+                "title": "Open Repository in New Window",
+                "category": "MindPool",
+                "icon": "$(multiple-windows)"
+            },
+            {
+                "command": "mindpool.openConfig",
+                "title": "Open config.json",
+                "category": "MindPool",
+                "icon": "$(gear)"
+            },
+            {
+                "command": "mindpool.openManifest",
+                "title": "Open skill.json",
+                "category": "MindPool",
+                "icon": "$(json)"
+            },
+            {
+                "command": "mindpool.addSkill",
+                "title": "Add Skill…",
+                "category": "MindPool",
+                "icon": "$(add)"
+            },
+            {
+                "command": "mindpool.updateSkills",
+                "title": "Update All Skills",
+                "category": "MindPool",
+                "icon": "$(rocket)"
+            },
+            {
+                "command": "mindpool.revealSkillsFolder",
+                "title": "Reveal mindSkills Folder",
+                "category": "MindPool",
+                "icon": "$(file-directory)"
+            }
+        ],
+        "menus": {
+            "view/title": [
+                {
+                    "command": "mindpool.sync",
+                    "when": "view == mindpool.dashboard",
+                    "group": "navigation@1"
+                },
+                {
+                    "command": "mindpool.openInNewWindow",
+                    "when": "view == mindpool.dashboard",
+                    "group": "navigation@2"
+                },
+                {
+                    "command": "mindpool.selectFolder",
+                    "when": "view == mindpool.dashboard",
+                    "group": "navigation@3"
+                },
+                {
+                    "command": "mindpool.openConfig",
+                    "when": "view == mindpool.dashboard",
+                    "group": "more@1"
+                },
+                {
+                    "command": "mindpool.openManifest",
+                    "when": "view == mindpool.dashboard",
+                    "group": "more@2"
+                },
+                {
+                    "command": "mindpool.revealSkillsFolder",
+                    "when": "view == mindpool.dashboard",
+                    "group": "more@3"
+                }
+            ]
+        },
+        "configuration": {
+            "title": "MindPool",
+            "properties": {
+                "mindpool.poolFolder": {
+                    "type": "string",
+                    "default": "",
+                    "scope": "machine-overridable",
+                    "markdownDescription": "Folder that contains the `config.json` pointing at your team skills repository. Supports `~`, `${userHome}` and `${workspaceFolder}`."
+                },
+                "mindpool.autoSync": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Sync automatically on startup, on an interval and when config.json / skill.json change."
+                },
+                "mindpool.syncIntervalMinutes": {
+                    "type": "number",
+                    "default": 15,
+                    "minimum": 0,
+                    "description": "Minutes between automatic syncs. 0 disables the timer."
+                },
+                "mindpool.autoUpdateSkills": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Install newer skill versions automatically during sync. When off, updates are only reported."
+                },
+                "mindpool.gitPath": {
+                    "type": "string",
+                    "default": "git",
+                    "scope": "machine",
+                    "description": "Path to the git executable."
+                }
+            }
+        },
+        "jsonValidation": [
+            {
+                "fileMatch": "skill.json",
+                "url": "./schemas/skill.schema.json"
+            }
+        ]
+    },
+    "scripts": {
+        "start": "node scripts/build.ts --watch",
+        "build": "node scripts/build.ts",
+        "typecheck": "tsc --noEmit -p .",
+        "test": "node --test \"src/test/unit/**/*.test.ts\"",
+        "test:e2e": "node scripts/build.ts --e2e && node src/test/e2e/runE2E.ts",
+        "test:all": "npm run typecheck && npm test && npm run test:e2e",
+        "package": "vsce package --no-dependencies",
+        "vscode:prepublish": "npm run typecheck && npm run build"
+    },
+    "devDependencies": {
+        "@types/node": "^26.6.6",
+        "@types/vscode": "~1.100.0",
+        "@vscode/test-electron": "^3.1.0",
+        "@vscode/vsce": "^4.1.0",
+        "esbuild": "^0.28.2",
+        "typescript": "^7.0.2"
+    }
+}

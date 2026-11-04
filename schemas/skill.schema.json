@@ -1,0 +1,41 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "MindPool skill.json",
+    "description": "Skills shared by the team. Each entry is downloaded via git into the non-versioned mindSkills/ folder.",
+    "type": "object",
+    "properties": {
+        "name": { "type": "string", "description": "Name of the team skill pool." },
+        "description": { "type": "string" },
+        "skills": {
+            "type": "object",
+            "description": "Skill name → git source, like dependencies in a package.json.",
+            "propertyNames": { "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$" },
+            "additionalProperties": {
+                "oneOf": [
+                    {
+                        "type": "string",
+                        "description": "Git URL, optionally followed by #tag, #branch or #semver-range (e.g. https://github.com/acme/skill.git#^1.2.0).",
+                        "examples": ["https://github.com/acme/skill.git", "git@github.com:acme/skill.git#^1.2.0"]
+                    },
+                    {
+                        "type": "object",
+                        "required": ["repository"],
+                        "properties": {
+                            "repository": { "type": "string", "description": "Git URL of the skill repository." },
+                            "branch": { "type": "string", "description": "Track the newest commit of this branch." },
+                            "tag": { "type": "string", "description": "Pin an exact tag. Newer releases are reported, not installed." },
+                            "version": { "type": "string", "description": "Semver range resolved against the repository tags, e.g. ^1.2.0. Auto-upgrades inside the range." }
+                        },
+                        "oneOf": [
+                            { "required": ["branch"], "not": { "anyOf": [{ "required": ["tag"] }, { "required": ["version"] }] } },
+                            { "required": ["tag"], "not": { "anyOf": [{ "required": ["branch"] }, { "required": ["version"] }] } },
+                            { "required": ["version"], "not": { "anyOf": [{ "required": ["branch"] }, { "required": ["tag"] }] } },
+                            { "not": { "anyOf": [{ "required": ["branch"] }, { "required": ["tag"] }, { "required": ["version"] }] } }
+                        ],
+                        "additionalProperties": false
+                    }
+                ]
+            }
+        }
+    }
+}
