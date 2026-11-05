@@ -4,7 +4,7 @@ dist/
 .vscode-test/
 *.vsix
 coverage/
-
+promo/
 # Secrets: credentials must never reach this public repository.
 # (Marketplace publish tokens belong in `vsce login` or the VSCE_PAT variable, not in files.)
 .env
