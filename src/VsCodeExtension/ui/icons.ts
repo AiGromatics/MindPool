@@ -4,7 +4,7 @@
  */
 
 const PATHS = {
-    logo: `<path d="M8.6 13.4c-2.4 0-4-1.6-4-3.5 0-1.5 1-2.7 2.3-3.1.3-1.7 1.7-2.8 3.4-2.8.7 0 1.2.2 1.7.5.5-.3 1-.5 1.7-.5 1.7 0 3.1 1.1 3.4 2.8 1.3.4 2.3 1.6 2.3 3.1 0 1.9-1.6 3.5-4 3.5"/><path d="M12 4.6v8.8"/><path d="M8.4 8.3c1 .1 1.7.7 1.9 1.6M15.6 8.3c-1 .1-1.7.7-1.9 1.6"/><path d="M2.5 17c1.6 0 1.6-1.2 3.2-1.2s1.6 1.2 3.2 1.2 1.6-1.2 3.1-1.2 1.6 1.2 3.2 1.2 1.6-1.2 3.2-1.2 1.6 1.2 3.1 1.2"/><path d="M5 20.4c1.2 0 1.2-1 2.4-1s1.2 1 2.4 1 1.2-1 2.4-1 1.2 1 2.4 1 1.2-1 2.4-1 1.2 1 2.4 1"/>`,
+    logo: `<path d="M9.6 1.8v6.6M9.6 20.4v1.8M1.8 14.4h1.8M15.6 14.4h6.6"/><circle cx="9.6" cy="14.4" r="6"/><circle cx="9.6" cy="14.4" r="1.2"/><path d="M19.2 2.6s-2.3 3-2.3 4.4a2.3 2.3 0 0 0 4.6 0c0-1.4-2.3-4.4-2.3-4.4Z"/>`,
     sync: `<path d="M20 11a8 8 0 0 0-14.3-4.9L4 8"/><path d="M4 3.5V8h4.5"/><path d="M4 13a8 8 0 0 0 14.3 4.9L20 16"/><path d="M20 20.5V16h-4.5"/>`,
     pull: `<path d="M12 3.5v11"/><path d="m7.5 10 4.5 4.5 4.5-4.5"/><path d="M4.5 19.5h15"/>`,
     push: `<path d="M12 14.5v-11"/><path d="M7.5 8 12 3.5 16.5 8"/><path d="M4.5 19.5h15"/>`,
@@ -44,4 +44,23 @@ export const ICON_NAMES = Object.keys(PATHS) as IconName[];
 export function icon(name: IconName, extraClass = ''): string {
     const cls = extraClass ? `icon icon-${name} ${extraClass}` : `icon icon-${name}`;
     return `<svg class="${cls}" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${PATHS[name]}</svg>`;
+}
+
+/**
+ * The full-colour MindPool mark (same drawing as media/icon.svg): the AIgromatics tile and
+ * survey grid, with a pool where the groma sits and a bronze skill dropping in. It keeps its
+ * brand colours in every theme, like a logo should. No ids, so it can appear more than once.
+ */
+export function brandMark(extraClass = ''): string {
+    return (
+        `<svg class="mark${extraClass ? ` ${extraClass}` : ''}" viewBox="0 0 100 100" aria-hidden="true" focusable="false">` +
+        `<rect width="100" height="100" rx="18.5" fill="#1F5C55"/>` +
+        `<path d="M80 0v100M0 20h100" stroke="#F0F3F3" stroke-opacity=".42" stroke-width="1"/>` +
+        `<path d="M40 0v100M0 60h100" stroke="#F0F3F3" stroke-width="2.7"/>` +
+        `<circle class="mark-ripple" cx="40" cy="60" r="31.5" fill="none" stroke="#F0F3F3" stroke-opacity=".5" stroke-width="2"/>` +
+        `<circle cx="40" cy="60" r="22.2" fill="#1F5C55" stroke="#F0F3F3" stroke-width="4.9"/>` +
+        `<circle class="mark-core" cx="40" cy="60" r="6.4" fill="#DFB15A"/>` +
+        `<path class="mark-drop" d="M80 8.5C80 8.5 72.4 18.6 72.4 23.4a7.6 7.6 0 0 0 15.2 0C87.6 18.6 80 8.5 80 8.5Z" fill="#DFB15A"/>` +
+        `</svg>`
+    );
 }

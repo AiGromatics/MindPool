@@ -75,6 +75,7 @@ function render(): void {
         }
     }
     root.innerHTML = renderApp(state, ui);
+    markEntered();
     if (key) {
         const el = findByKey(key);
         if (el) {
@@ -89,6 +90,22 @@ function render(): void {
         }
     }
     persist();
+}
+
+/**
+ * The dashboard re-renders on every state update, so entrance animations would replay on
+ * each sync tick. They play once, when the first real state arrives; after that the
+ * body carries data-entered and the CSS turns them off.
+ */
+let entering = false;
+function markEntered(): void {
+    if (entering || !state) {
+        return;
+    }
+    entering = true;
+    setTimeout(() => {
+        document.body.dataset.entered = '';
+    }, 700);
 }
 
 function focus(id: string): void {

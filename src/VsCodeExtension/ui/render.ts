@@ -1,6 +1,6 @@
 import { describeSpec, shortSha } from '../core/format.ts';
 import type { FileChange, LogEntry, PoolState, RemoteInfo, RepoStatus, SkillHealth, SkillStatus } from '../core/types.ts';
-import { icon, type IconName } from './icons.ts';
+import { brandMark, icon, type IconName } from './icons.ts';
 import { overallStatus, prettyUrl, relativeTime, tildify } from './status.ts';
 
 /**
@@ -140,8 +140,8 @@ function renderHeader(state: PoolState | undefined): string {
     const busy = status.tone === 'busy';
     return (
         `<header class="hero tone-${status.tone}">` +
-        `<div class="brand"><span class="logo${busy ? ' logo-busy' : ''}">${icon('logo')}</span>` +
-        `<div class="brand-text"><h1>MindPool</h1><p class="subtitle" title="${esc(status.detail)}">${esc(status.detail)}</p></div></div>` +
+        `<div class="brand"><span class="logo${busy ? ' logo-busy' : ''}">${brandMark()}</span>` +
+        `<div class="brand-text"><h1>MindPool <span class="byline">by AIgromatics</span></h1><p class="subtitle" title="${esc(status.detail)}">${esc(status.detail)}</p></div></div>` +
         `<span class="pill tone-${status.tone}" role="status" aria-live="polite" title="${esc(status.detail)}">` +
         `${busy ? icon('sync', 'spin') : `<span class="dot"></span>`}<span>${esc(status.label)}</span></span>` +
         `</header>`
@@ -153,7 +153,7 @@ function renderHeader(state: PoolState | undefined): string {
 function renderWelcome(): string {
     return (
         `<section class="card welcome">` +
-        `<div class="welcome-art" aria-hidden="true"><span>🧠</span><span class="wave">🌊</span></div>` +
+        `<div class="welcome-art" aria-hidden="true">${brandMark()}</div>` +
         `<h2>Welcome to MindPool</h2>` +
         `<p>Keep your team's AI skills in one private Git repository and sync them everywhere, without publishing anything to the wild web.</p>` +
         `<ol class="steps">` +
@@ -511,7 +511,7 @@ function renderSkills(state: PoolState, ui: UiState): string {
     }
     if (!state.manifest.exists) {
         parts.push(
-            `<div class="empty-state"><div class="empty-art" aria-hidden="true">🧩</div><p>This repository has no <code>skill.json</code> yet. It lists the skills your team shares, like dependencies in a package.json.</p>` +
+            `<div class="empty-state"><div class="empty-art" aria-hidden="true">${icon('file')}</div><p>This repository has no <code>skill.json</code> yet. It lists the skills your team shares, like dependencies in a package.json.</p>` +
                 (readOnly ? '' : command('createManifest', { label: 'Create skill.json', iconName: 'wand', variant: 'primary' })) +
                 `</div>`,
         );
@@ -519,7 +519,7 @@ function renderSkills(state: PoolState, ui: UiState): string {
         parts.push(banner('error', 'alert', `<b>skill.json has a problem.</b> ${esc(state.manifest.error)}`, command('openManifest', { label: 'Open', iconName: 'file' })));
     } else if (state.skills.length === 0 && !ui.addingSkill) {
         parts.push(
-            `<div class="empty-state"><div class="empty-art" aria-hidden="true">🌱</div><p>No skills yet. Add the first one and your whole team gets it on the next sync.</p>` +
+            `<div class="empty-state"><div class="empty-art" aria-hidden="true">${icon('skill')}</div><p>No skills yet. Add the first one and your whole team gets it on the next sync.</p>` +
                 (readOnly ? '' : button({ label: 'Add a skill', iconName: 'plus', action: 'toggleAddSkill', variant: 'primary' })) +
                 `</div>`,
         );

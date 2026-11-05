@@ -191,3 +191,7 @@ src/
 ## License
 
 GPL-3.0. See [LICENSE](LICENSE).
+
+The dashboard uses the AIgromatics brand fonts, Schibsted Grotesk and IBM Plex Mono, under the
+SIL Open Font License 1.1. `scripts/build.ts` inlines them into the bundle; their licenses are in
+[`media/fonts/`](media/fonts).

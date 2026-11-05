@@ -7,8 +7,15 @@ import { STYLES } from './styles.ts';
  */
 declare const __WEBVIEW_SCRIPT__: string;
 
+/** @font-face rules for the AIgromatics fonts, inlined by scripts/build.ts (empty in tests). */
+declare const __BRAND_FONTS__: string;
+
 export function webviewScript(): string {
     return typeof __WEBVIEW_SCRIPT__ === 'string' ? __WEBVIEW_SCRIPT__ : '';
+}
+
+export function brandFonts(): string {
+    return typeof __BRAND_FONTS__ === 'string' ? __BRAND_FONTS__ : '';
 }
 
 export function createNonce(): string {
@@ -30,7 +37,7 @@ export function buildHtml(options: HtmlOptions): string {
     const csp = [
         `default-src 'none'`,
         `img-src ${cspSource} data:`,
-        `font-src ${cspSource}`,
+        `font-src ${cspSource} data:`,
         `style-src 'nonce-${nonce}'`,
         `script-src 'nonce-${nonce}'`,
     ].join('; ');
@@ -41,7 +48,7 @@ export function buildHtml(options: HtmlOptions): string {
 <meta http-equiv="Content-Security-Policy" content="${csp}">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MindPool</title>
-<style nonce="${nonce}">${STYLES}</style>
+<style nonce="${nonce}">${brandFonts()}${STYLES}</style>
 </head>
 <body>
 <div id="app">${renderLoading()}</div>

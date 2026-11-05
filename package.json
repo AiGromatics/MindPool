@@ -7,6 +7,10 @@
     "author": "AiGromatics",
     "license": "GPL-3.0",
     "icon": "media/icon.png",
+    "galleryBanner": {
+        "color": "#1F5C55",
+        "theme": "dark"
+    },
     "type": "module",
     "main": "./dist/main.cjs",
     "repository": {

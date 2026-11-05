@@ -1,0 +1,847 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>MindPool explainer</title>
+<!--
+  MindPool explainer film, 1920 x 1080, in the AIgromatics brand.
+  Every frame is a pure function of one number: window.__frame(t) seeks a paused GSAP timeline.
+  render.mjs screenshots it frame by frame and renders the soundtrack offline with Web Audio.
+  Built by build.ts (fonts, product icons, logo and real dashboard snapshots are inlined).
+  Open film.build.html?preview in a browser to scrub it.
+-->
+<style>
+/*@FONTS@*/
+:root {
+  --page: #E7ECEA; --panel: #FAFBFA; --ink: #132422; --ink-2: #3D524F; --ink-3: #566B68;
+  --line: #CAD5D2; --line-2: #A9B9B5; --verde: #1F5C55; --verde-deep: #174A44; --mint: #6CC1B2;
+  --bronze: #DFB15A; --bronze-text: #855F1C; --rust: #A6472A; --night: #0E1D1B; --night-2: #132826;
+  --sans: "Schibsted Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --mono: "IBM Plex Mono", Menlo, monospace;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: #0A1715; }
+body { width: 1920px; height: 1080px; overflow: hidden; -webkit-font-smoothing: antialiased; }
+.stage { position: relative; width: 1920px; height: 1080px; overflow: hidden; background: var(--page); font-family: var(--sans); color: var(--ink); }
+.stage > *, .scene > *, #chrome > *, #route > * { position: absolute; }
+.code, .caret, .lap, .node, .tline, .tdash, .drop, .band, .axis, .tick, .vsc .act, .vsc .head, .vsc iframe, .vsc .status, .vsc .act .ai { position: absolute; }
+.grid { inset: 0; background-image: linear-gradient(rgba(31, 92, 85, .065) 1px, transparent 1px), linear-gradient(90deg, rgba(31, 92, 85, .065) 1px, transparent 1px); background-size: 60px 60px; background-position: 0 0; }
+.scene { inset: 0; visibility: hidden; }
+.scene.dark { background: var(--night); color: #E6EEEC; }
+.scene.dark .grid { background-image: linear-gradient(rgba(230, 238, 236, .045) 1px, transparent 1px), linear-gradient(90deg, rgba(230, 238, 236, .045) 1px, transparent 1px); }
+.icon { width: 1em; height: 1em; }
+svg.mark { display: block; width: 100%; height: 100%; }
+
+/* type */
+.hl { left: 120px; top: 190px; width: 780px; margin: 0; font-weight: 800; font-size: 84px; line-height: 1.02; letter-spacing: -.045em; color: var(--ink); text-wrap: balance; }
+.hl em { font-style: normal; color: var(--verde); }
+.hl em.bad { color: var(--rust); }
+.dark .hl { color: #E6EEEC; }
+.dark .hl em { color: var(--mint); }
+.hl .w { position: relative; display: inline-block; }
+.sub { left: 120px; width: 720px; margin: 0; font-size: 30px; line-height: 1.42; color: var(--ink-2); text-wrap: pretty; }
+.dark .sub { color: #B2C3BF; }
+.kicker { left: 120px; top: 150px; font: 600 24px/1 var(--mono); color: var(--verde); letter-spacing: -.01em; white-space: nowrap; }
+.mono { font-family: var(--mono); }
+
+/* windows */
+.win { background: var(--panel); border-radius: 16px; overflow: hidden; box-shadow: inset 0 0 0 1.5px var(--line), 0 30px 70px -40px rgba(22, 69, 64, .55); }
+.win .bar { position: relative; display: flex; align-items: center; gap: 9px; height: 50px; padding: 0 18px; border-bottom: 1.5px solid #E7ECEA; font: 500 19px/1 var(--mono); color: var(--ink-3); white-space: nowrap; }
+.win .bar i { display: inline-block; width: 11px; height: 11px; border-radius: 50%; background: var(--line); }
+.win .bar b { font-weight: 600; color: var(--ink-2); margin-left: 8px; }
+.code { left: 0; top: 50px; right: 0; padding: 18px 26px; font: 400 19px/31px var(--mono); color: var(--ink-2); white-space: pre; }
+.code .ln { position: relative; display: block; height: 31px; }
+.code .k { color: var(--verde); font-weight: 600; }
+.code .p { color: var(--line-2); }
+.code .v { border-radius: 5px; padding: 0 2px; margin: 0 -2px; }
+.caret { width: 11px; height: 26px; background: var(--verde); border-radius: 2px; }
+.pill { display: inline-flex; align-items: center; gap: 10px; height: 52px; padding: 0 26px; border-radius: 999px; background: var(--verde); color: #F0F3F3; font: 600 22px/1 var(--sans); white-space: nowrap; }
+.pill.ghost { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--line-2); }
+.pill .icon { width: 22px; height: 22px; }
+.chip { display: inline-flex; align-items: center; gap: 8px; height: 38px; padding: 0 14px; border-radius: 999px; font: 500 19px/1 var(--mono); white-space: nowrap; color: var(--ink-2); background: var(--panel); box-shadow: inset 0 0 0 1.5px var(--line); }
+.chip .icon { width: 18px; height: 18px; }
+.chip.ok { color: var(--verde); background: #E3EFEC; box-shadow: inset 0 0 0 1.5px rgba(31, 92, 85, .35); }
+.chip.warn { color: var(--bronze-text); background: #F7EEDB; box-shadow: inset 0 0 0 1.5px rgba(133, 95, 28, .35); }
+.chip.bad { color: var(--rust); background: #F6E6E0; box-shadow: inset 0 0 0 1.5px rgba(166, 71, 42, .4); }
+.ring { border-radius: 12px; box-shadow: 0 0 0 3px var(--bronze), 0 0 0 10px rgba(223, 177, 90, .28); visibility: hidden; }
+.drop { width: 30px; height: 40px; visibility: hidden; }
+
+/* chrome */
+#chrome { inset: 0; visibility: hidden; z-index: 20; }
+#lockup { left: 120px; top: 52px; display: flex; align-items: center; gap: 14px; }
+#lockup .m { position: relative; width: 46px; height: 46px; }
+#lockup span { position: relative; font: 600 30px/1 var(--mono); color: var(--verde); letter-spacing: -.02em; }
+.chap { right: 120px; top: 64px; font: 500 22px/1 var(--mono); color: var(--ink-3); white-space: nowrap; visibility: hidden; }
+.chap b { color: var(--verde); font-weight: 600; }
+#route { left: 120px; top: 1004px; width: 1680px; height: 40px; }
+#routeLine { left: 0; top: 0; width: 1680px; height: 2px; background: var(--line); }
+#routeFill { left: 0; top: 0; width: 1680px; height: 2px; background: var(--verde); transform-origin: 0 0; transform: scaleX(0); }
+.stake { top: -7px; width: 16px; height: 16px; margin-left: -8px; border-radius: 50%; background: var(--page); box-shadow: inset 0 0 0 2px var(--line-2); }
+.stake span { position: absolute; left: 50%; top: 26px; transform: translateX(-50%); font: 500 18px/1 var(--mono); color: var(--ink-3); white-space: nowrap; }
+
+/* cover / end */
+.big-mark { width: 600px; height: 600px; }
+.byline { display: flex; align-items: center; gap: 16px; font: 500 24px/1 var(--mono); color: #B2C3BF; white-space: nowrap; }
+.byline .groma { position: relative; width: 44px; height: 44px; }
+.url { font: 600 58px/1 var(--mono); color: var(--mint); letter-spacing: -.03em; white-space: nowrap; }
+
+/* problem */
+.lap { width: 400px; height: 330px; }
+.lap .rows { position: absolute; left: 0; right: 0; top: 50px; padding: 14px 22px; }
+.lap .row { position: relative; display: flex; align-items: center; justify-content: space-between; height: 84px; border-bottom: 1.5px solid #EEF2F1; font: 600 23px/1 var(--mono); color: var(--ink); }
+.lap .row:last-child { border-bottom: 0; }
+.lap .row.gone > span:first-child { color: var(--line-2); text-decoration: line-through; text-decoration-thickness: 2px; }
+
+/* tree */
+.tree { left: 960px; top: 452px; width: 840px; }
+.node { left: 0; height: 40px; display: flex; align-items: center; gap: 12px; font: 600 22px/1 var(--mono); color: var(--ink); white-space: nowrap; }
+.node .icon { width: 24px; height: 24px; color: var(--verde); }
+.node .note { font-weight: 400; font-size: 18px; color: var(--ink-3); margin-left: 12px; }
+.node .chip { height: 32px; font-size: 16px; margin-left: 10px; }
+.tline { background: var(--line-2); width: 2px; transform-origin: 0 0; }
+.tdash { background: var(--line-2); height: 2px; width: 18px; }
+
+/* versions */
+.rules { left: 960px; top: 160px; width: 840px; }
+.rules .r { position: relative; display: grid; grid-template-columns: 250px 1fr 1fr; gap: 22px; align-items: center; height: 80px; padding: 0 20px; border-bottom: 1.5px solid var(--line); font-size: 21px; line-height: 1.25; color: var(--ink-2); }
+.rules .r.h { height: 44px; font: 500 17px/1 var(--mono); color: var(--ink-3); }
+.rules .r code { font: 600 19px/1.2 var(--mono); color: var(--verde); }
+.axis { left: 1000px; top: 690px; width: 760px; height: 4px; background: var(--line-2); border-radius: 2px; }
+.tick { top: 670px; width: 2px; height: 44px; background: var(--line-2); }
+.tick span { position: absolute; left: 50%; top: 58px; transform: translateX(-50%); font: 600 21px/1 var(--mono); color: var(--ink-2); white-space: nowrap; }
+.band { top: 652px; height: 80px; border-radius: 14px; background: rgba(31, 92, 85, .1); box-shadow: inset 0 0 0 2px rgba(31, 92, 85, .45); }
+.band span { position: absolute; left: 18px; top: -40px; font: 600 22px/1 var(--mono); color: var(--verde); white-space: nowrap; }
+
+/* callouts */
+.callouts { left: 120px; top: 470px; width: 760px; }
+.co { position: relative; display: block; padding: 18px 0 18px 30px; border-left: 4px solid var(--line); margin-bottom: 10px; }
+.co h3 { margin: 0 0 8px; font: 600 26px/1 var(--mono); color: var(--verde); letter-spacing: -.01em; }
+.co p { margin: 0; font-size: 25px; line-height: 1.35; color: var(--ink-2); }
+.co .bar { position: absolute; left: -4px; top: 0; width: 4px; height: 100%; background: var(--bronze); transform-origin: 50% 0; transform: scaleY(0); }
+
+/* vs code window */
+.vsc { left: 1100px; top: 96px; width: 700px; height: 860px; border-radius: 16px; overflow: hidden; background: #181818; box-shadow: 0 0 0 1.5px #2B2B2B, 0 40px 80px -40px rgba(10, 23, 21, .7); }
+.vsc .act { left: 0; top: 0; width: 72px; bottom: 44px; background: #181818; border-right: 1.5px solid #2B2B2B; }
+.vsc .act .ai { left: 22px; width: 28px; height: 28px; color: #858585; }
+.vsc .act .ai svg { width: 28px; height: 28px; }
+.vsc .act .ai.on { color: #E6EEEC; }
+.vsc .act .ai.on::before { content: ""; position: absolute; left: -22px; top: -10px; width: 3px; height: 48px; background: var(--mint); }
+.vsc .head { left: 72px; right: 0; top: 0; height: 84px; background: #181818; border-bottom: 1.5px solid #2B2B2B; }
+.vsc .head span { position: absolute; left: 30px; font: 600 21px/1 -apple-system, sans-serif; letter-spacing: .06em; color: #CCCCCC; }
+.vsc iframe { left: 72px; top: 84px; width: 628px; height: 732px; border: 0; background: var(--night); }
+.vsc .status { left: 0; right: 0; bottom: 0; height: 44px; background: #181818; border-top: 1.5px solid #2B2B2B; }
+.vsc .status span { position: absolute; left: 24px; top: 0; height: 44px; display: flex; align-items: center; gap: 10px; padding: 0 12px; font: 500 21px/1 -apple-system, sans-serif; color: #CCCCCC; }
+.vsc .status .icon { width: 22px; height: 22px; }
+
+/* fact rows */
+.fact { display: flex; align-items: flex-start; gap: 20px; width: 840px; font-size: 26px; line-height: 1.35; color: var(--ink-2); }
+.fact .ic { position: relative; flex: none; display: grid; place-items: center; width: 52px; height: 52px; border-radius: 12px; background: #E3EFEC; color: var(--verde); }
+.fact .ic .icon { width: 28px; height: 28px; }
+.fact b { color: var(--ink); font-weight: 700; }
+
+/* transitions */
+.wipe { width: 100px; height: 100px; margin: -50px 0 0 -50px; border-radius: 50%; visibility: hidden; z-index: 30; }
+
+/* preview controls (not in the render) */
+#ui { position: fixed; left: 0; right: 0; bottom: 0; display: none; gap: 12px; align-items: center; padding: 10px 16px; background: rgba(10, 23, 21, .9); color: #E6EEEC; font: 14px var(--mono); z-index: 99; }
+#ui input { flex: 1; }
+body.preview #ui { display: flex; }
+</style>
+</head>
+<body>
+<div class="stage" id="stage">
+
+  <!-- 1. Cover (dark) -->
+  <section class="scene dark" id="s1" style="visibility:visible">
+    <div class="grid"></div>
+    <div class="big-mark" id="cvMark" style="left:1140px;top:190px"></div>
+    <h1 class="hl" id="cvH" style="top:200px;width:960px;font-size:104px">Your team’s<br>AI skills. <br><em>One private pool.</em></h1>
+    <p class="sub" id="cvSub" data-below="#cvH" style="width:760px">MindPool is a VS Code extension that syncs your team’s skills from a private Git repository. Nothing is published to the web.</p>
+    <div class="byline" id="cvBy" style="left:120px;top:860px"><span class="groma"></span><span>An open source extension by AIgromatics</span></div>
+  </section>
+
+  <!-- 2. Problem -->
+  <section class="scene" id="s2">
+    <div class="grid"></div>
+    <h2 class="hl" id="pbH">Every teammate has <em class="bad">a different copy.</em></h2>
+    <p class="sub" id="pbSub" data-below="#pbH">Skills get edited, forgotten and left behind. And publishing your team’s skills to the open web isn’t an option.</p>
+    <div id="laps"></div>
+  </section>
+
+  <!-- 3. Solution -->
+  <section class="scene" id="s3">
+    <div class="grid"></div>
+    <h2 class="hl" id="soH">Keep them in <em>one private Git repository.</em></h2>
+    <p class="sub" id="soSub" data-below="#soH">Its <span class="mono" style="position:static;font-size:.92em">skill.json</span> lists the skills your team shares, like dependencies in a package.json.</p>
+    <div class="win" id="soWin" style="left:960px;top:150px;width:840px;height:676px">
+      <div class="bar"><i></i><i></i><i></i><b>acme/team-skills</b><span style="position:static">/ skill.json</span></div>
+      <div class="code" id="soCode"></div>
+    </div>
+  </section>
+
+  <!-- 4. How it works -->
+  <section class="scene" id="s4">
+    <div class="grid"></div>
+    <div class="kicker" id="hwK" style="top:156px">Step</div>
+    <div class="steps" id="hwSteps"></div>
+    <h2 class="hl" id="hwH1" style="top:250px">Choose a <em>pool folder.</em></h2>
+    <p class="sub" id="hwS1" data-below="#hwH1">Fill in the repository URL and branch, then Save &amp; clone. MindPool writes <span class="mono" style="position:static;font-size:.92em">config.json</span> for you.</p>
+    <h2 class="hl" id="hwH2" style="top:250px">It clones the repo and <em>installs every skill.</em></h2>
+    <p class="sub" id="hwS2" data-below="#hwH2">Each skill is downloaded with Git into <span class="mono" style="position:static;font-size:.92em">mindSkills/</span>, a folder that is never committed. Only the team settings get pushed.</p>
+    <h2 class="hl" id="hwH3" style="top:250px">Then it keeps <em>everything in sync.</em></h2>
+    <p class="sub" id="hwS3" data-below="#hwH3">Each sync pulls the team’s new commits and installs newer skill versions. You don’t have to do anything.</p>
+    <div class="win" id="cfgWin" style="left:960px;top:160px;width:840px;height:262px">
+      <div class="bar"><i></i><i></i><i></i><b>~/MindPool</b><span style="position:static">/ config.json</span></div>
+      <div class="code" id="cfgCode"></div>
+      <div class="pill" id="cfgBtn" style="position:absolute;right:26px;bottom:22px">Save &amp; clone</div>
+    </div>
+    <div class="win" id="trgWin" style="left:960px;top:160px;width:840px;height:262px">
+      <div class="bar"><i></i><i></i><i></i><b>MindPool</b><span style="position:static">syncs when</span></div>
+      <div id="trgRows" style="position:absolute;left:26px;top:66px;right:26px"></div>
+    </div>
+    <div class="tree" id="tree"></div>
+  </section>
+
+  <!-- 5. Versions -->
+  <section class="scene" id="s5">
+    <div class="grid"></div>
+    <h2 class="hl" id="vsH">Each skill updates <em>the way you choose.</em></h2>
+    <p class="sub" id="vsSub" data-below="#vsH">Track a branch, pin a release tag, or follow a semver range that upgrades by itself.</p>
+    <div class="rules" id="rules"></div>
+    <div id="axisWrap" style="inset:0"></div>
+    <p class="sub mono" id="vsNpm" style="left:1000px;top:880px;width:820px;font-size:21px;color:#566B68">Ranges work like npm’s: ^1.2.0, ~1.2, &gt;=2 &lt;3, 1.x</p>
+  </section>
+
+  <!-- 6. Safety -->
+  <section class="scene" id="s6">
+    <div class="grid"></div>
+    <h2 class="hl" id="sfH">Your edits are <em>never overwritten.</em></h2>
+    <p class="sub" id="sfSub" data-below="#sfH">A skill with local changes stays exactly as it is. You decide whether to Reinstall.</p>
+    <div class="win" id="sfWin" style="left:960px;top:150px;width:840px;height:500px">
+      <div class="bar"><i></i><i></i><i></i><b>Skills</b><span style="position:static">mindSkills/</span></div>
+      <iframe id="rowsFrame" style="position:absolute;left:24px;top:72px;width:792px;height:410px;border:0" srcdoc="@ROWS_SRCDOC@"></iframe>
+      <div id="sweep" style="position:absolute;left:0;top:50px;width:840px;height:4px;background:linear-gradient(90deg,transparent,#DFB15A,transparent);visibility:hidden"></div>
+    </div>
+    <div class="fact" id="sfF1" style="left:960px;top:700px"><span class="ic" data-icon="lock"></span><span style="position:static"><b>Uses your normal Git login.</b> MindPool never asks for a password in the background.</span></div>
+    <div class="fact" id="sfF2" style="left:960px;top:820px"><span class="ic" data-icon="eye"></span><span style="position:static"><b>Nothing is published.</b> Skills come straight from your Git repositories, and <span class="mono" style="position:static;font-size:.9em">mindSkills/</span> is never pushed.</span></div>
+  </section>
+
+  <!-- 7. Dashboard -->
+  <section class="scene" id="s7">
+    <div class="grid"></div>
+    <h2 class="hl" id="dbH" style="top:170px">Pull, commit and push <em>from one sidebar.</em></h2>
+    <div class="callouts" id="callouts" data-below="#dbH">
+      <div class="co" id="co1"><div class="bar"></div><h3>Repository</h3><p>Sync, Pull, Push, or Open it in a new window.</p></div>
+      <div class="co" id="co2"><div class="bar"></div><h3>Changes</h3><p>Tick the files, write a message, Commit &amp; Push.</p></div>
+      <div class="co" id="co3"><div class="bar"></div><h3>Skills</h3><p>Status for every skill. ＋ adds one with a guided form.</p></div>
+      <div class="co" id="co4"><div class="bar"></div><h3>Activity</h3><p>What happened and when.</p></div>
+    </div>
+    <div class="vsc" id="vsc">
+      <div class="act"><span class="ai" style="top:24px" data-icon="file"></span><span class="ai" style="top:84px" data-icon="branch"></span><span class="ai on" style="top:144px" id="actMp"></span></div>
+      <div class="head"><span style="top:20px">MINDPOOL</span><span style="top:54px;font-size:17px;color:#9D9D9D">DASHBOARD</span></div>
+      <iframe id="dashFrame" srcdoc="@DASH_SRCDOC@"></iframe>
+      <div class="status"><span id="sbItem"></span></div>
+    </div>
+    <div class="ring" id="dbRing"></div>
+  </section>
+
+  <!-- 8. End (dark) -->
+  <section class="scene dark" id="s8">
+    <div class="grid"></div>
+    <h2 class="hl" id="enH" style="top:180px;width:900px;font-size:96px">Set it up once. <em>Stay in sync.</em></h2>
+    <div id="enSteps" style="left:120px;top:440px;width:820px"></div>
+    <div class="big-mark" id="enMark" style="left:1260px;top:150px;width:480px;height:480px"></div>
+    <div class="url" id="enUrl" style="left:120px;top:730px">github.com/AiGromatics/MindPool</div>
+    <div class="byline" id="enMeta" style="left:120px;top:822px;font-size:26px">Open source · GPL-3.0 · VS Code 1.100 or later</div>
+    <div class="byline" id="enBy" style="left:1260px;top:740px"><span class="groma" style="width:56px;height:56px"></span><span style="font:600 40px/1 var(--mono);color:#6CC1B2;letter-spacing:-.02em">AIgromatics</span></div>
+  </section>
+
+  <!-- chrome over the light scenes -->
+  <div id="chrome">
+    <div id="lockup"><span class="m"><!--@MARK@--></span><span>MindPool</span></div>
+    <div class="chap" id="chap1"><b>01</b> · Why</div>
+    <div class="chap" id="chap2"><b>02</b> · How it works</div>
+    <div class="chap" id="chap3"><b>03</b> · Versions</div>
+    <div class="chap" id="chap4"><b>04</b> · Safety</div>
+    <div class="chap" id="chap5"><b>05</b> · Dashboard</div>
+    <div id="route"><div id="routeLine"></div><div id="routeFill"></div></div>
+  </div>
+
+  <div class="wipe" id="wipeA" style="background:#E7ECEA"></div>
+  <div class="wipe" id="wipeB" style="background:#0E1D1B"></div>
+</div>
+<div id="ui"><button id="play">Play</button><input id="scrub" type="range" min="0" max="1000" value="0"><span id="time">0.00</span></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script>
+/*@ICONS@*/
+(() => {
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+  const el = (html) => { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstElementChild; };
+
+  /* ---------- marks ---------- */
+  // The MindPool mark with ids for its moving parts (same drawing as media/icon.svg).
+  const markSVG = (p) => `<svg class="mark" viewBox="0 0 100 100" style="overflow:visible">
+    <rect width="100" height="100" rx="18.5" fill="#1F5C55"/>
+    <path d="M80 0v100M0 20h100" stroke="#F0F3F3" stroke-opacity=".42" stroke-width="1"/>
+    <path d="M40 0v100M0 60h100" stroke="#F0F3F3" stroke-width="2.7"/>
+    <circle id="${p}Rip" cx="40" cy="60" r="31.5" fill="none" stroke="#F0F3F3" stroke-opacity=".5" stroke-width="2"/>
+    <circle id="${p}Wave1" cx="40" cy="60" r="22" fill="none" stroke="#DFB15A" stroke-width="1.6" opacity="0"/>
+    <circle id="${p}Wave2" cx="40" cy="60" r="22" fill="none" stroke="#DFB15A" stroke-width="1.2" opacity="0"/>
+    <circle cx="40" cy="60" r="22.2" fill="#1F5C55" stroke="#F0F3F3" stroke-width="4.9"/>
+    <circle id="${p}Core" cx="40" cy="60" r="6.4" fill="#DFB15A"/>
+    <path id="${p}Drop" d="M80 8.5C80 8.5 72.4 18.6 72.4 23.4a7.6 7.6 0 0 0 15.2 0C87.6 18.6 80 8.5 80 8.5Z" fill="#DFB15A"/>
+  </svg>`;
+  // The AIgromatics mark, as on aigromatics' own site.
+  const gromaSVG = `<svg viewBox="0 0 100 100" style="display:block;width:100%;height:100%"><rect width="100" height="100" rx="18.5" fill="#1F5C55"/><line x1="80" y1="0" x2="80" y2="100" stroke="rgba(240,243,243,.42)" stroke-width="1"/><line x1="0" y1="20" x2="100" y2="20" stroke="rgba(240,243,243,.42)" stroke-width="1"/><line x1="40" y1="0" x2="40" y2="100" stroke="#F0F3F3" stroke-width="2.7"/><line x1="0" y1="60" x2="100" y2="60" stroke="#F0F3F3" stroke-width="2.7"/><circle cx="40" cy="60" r="22.2" fill="#1F5C55" stroke="#F0F3F3" stroke-width="4.9"/><g transform="rotate(-40 40 60)"><rect x="2.1" y="58.4" width="75.8" height="3.2" fill="#DFB15A"/><rect x="0.25" y="51.25" width="3.7" height="17.5" fill="#DFB15A"/><rect x="76.05" y="51.25" width="3.7" height="17.5" fill="#DFB15A"/></g><circle cx="40" cy="60" r="3.8" fill="#F0F3F3"/></svg>`;
+  const dropSVG = `<svg viewBox="0 0 30 40" style="display:block;width:100%;height:100%"><path d="M15 1S2 18 2 26a13 13 0 0 0 26 0C28 18 15 1 15 1Z" fill="#DFB15A"/></svg>`;
+  $('#cvMark').innerHTML = markSVG('cv');
+  $('#enMark').innerHTML = markSVG('en');
+  $$('.groma').forEach(n => n.innerHTML = gromaSVG);
+  $$('[data-icon]').forEach(n => n.innerHTML = ICONS[n.dataset.icon]);
+  $('#actMp').style.cssText += ';-webkit-mask:url("@ACT_MASK@") center/28px no-repeat;mask:url("@ACT_MASK@") center/28px no-repeat;background:#E6EEEC';
+  $("#sbItem").innerHTML = `${ICONS.skill}<span style="position:static">MindPool 5</span>`;
+
+  /* ---------- builders ---------- */
+  // Headlines: words in spans so they can rise one by one.
+  $$('.hl').forEach(h => {
+    const walk = (node) => {
+      Array.from(node.childNodes).forEach(c => {
+        if (c.nodeType === 3) {
+          const frag = document.createDocumentFragment();
+          c.textContent.split(/(\s+)/).forEach(part => {
+            if (!part) return;
+            if (/^\s+$/.test(part)) frag.appendChild(document.createTextNode(part));
+            else { const s = document.createElement('span'); s.className = 'w'; s.textContent = part; frag.appendChild(s); }
+          });
+          c.replaceWith(frag);
+        } else if (c.nodeType === 1 && c.tagName === 'EM') walk(c);
+      });
+    };
+    walk(h);
+  });
+
+  // Code windows: one line per row, with syntax colour and version highlights.
+  const codeLines = (lines) => lines.map(l => `<span class="ln">${l
+    .replace(/("[^"]*")(\s*:)/g, '<span class="k" style="position:static">$1</span>$2')
+    .replace(/\{\{(.+?)\}\}/g, '<span class="v" style="position:static">$1</span>')
+    .replace(/([{}[\],])/g, '<span class="p" style="position:static">$1</span>')}</span>`).join('');
+  $('#soCode').innerHTML = codeLines([
+    '{',
+    '  "name": "acme-team-skills",',
+    '  "skills": {',
+    '    "code-review": "https://github.com/acme/skill-code-review.git",',
+    '    "pdf-tools": "https://github.com/acme/pdf-tools.git{{#^2.1.0}}",',
+    '    "writer": {',
+    '      "repository": "git@github.com:acme/writer.git",',
+    '      "branch": "{{develop}}"',
+    '    },',
+    '    "planner": {',
+    '      "repository": "https://github.com/acme/planner.git",',
+    '      "tag": "{{v1.4.0}}"',
+    '    },',
+    '    "translator": {',
+    '      "repository": "https://github.com/acme/translator.git",',
+    '      "version": "{{~1.2}}"',
+    '    }',
+    '  }',
+    '}',
+  ]) + '<span class="caret" id="soCaret"></span>';
+  $('#cfgCode').innerHTML = codeLines([
+    '{',
+    '  "repository": "git@github.com:acme/team-skills.git",',
+    '  "branch": "main",',
+    '  "directory": "team-skills"',
+    '}',
+  ]);
+  $$('.code .ln').forEach(n => n.style.clipPath = 'inset(0 100% 0 0)');
+
+  // Problem: four laptops, four different copies.
+  const LAPS = [
+    [['code-review', 'v1.4.0', 'ok'], ['pdf-tools', 'v2.1.0', 'ok'], ['writer', 'v1.0.0', 'ok']],
+    [['code-review', 'v1.2.0', 'bad'], ['pdf-tools', 'v2.3.0', 'ok'], ['writer', 'missing', 'gone']],
+    [['code-review', 'edited', 'warn'], ['pdf-tools', 'v1.9.0', 'bad'], ['writer', 'v1.0.0', 'ok']],
+    [['code-review', 'missing', 'gone'], ['pdf-tools', 'v2.3.0', 'ok'], ['writer', 'v0.9.0', 'bad']],
+  ];
+  LAPS.forEach((rows, i) => {
+    const x = 960 + (i % 2) * 440, y = 170 + Math.floor(i / 2) * 370;
+    $('#laps').appendChild(el(`<div class="win lap" id="lap${i}" style="left:${x}px;top:${y}px">
+      <div class="bar"><i></i><i></i><i></i><b>laptop ${i + 1}</b></div>
+      <div class="rows"><div>${rows.map(([n, v, k], j) => `<div class="row ${k === 'gone' ? 'gone' : ''}"><span>${n}</span><span class="chip ${k === 'gone' ? 'bad' : k === 'ok' ? '' : k}" data-k="${k}" id="lc${i}${j}">${v}</span></div>`).join('')}</div></div>
+    </div>`));
+  });
+
+  // How it works: step dots, triggers and the folder tree.
+  $('#hwSteps').outerHTML = `<div id="hwSteps" style="left:204px;top:146px;display:flex;gap:12px">${[1, 2, 3].map(n => `<span id="dot${n}" style="position:relative;display:grid;place-items:center;width:34px;height:34px;border-radius:50%;font:600 18px/1 var(--mono);color:#566B68;box-shadow:inset 0 0 0 2px #A9B9B5">${n}</span>`).join('')}</div>`;
+  const TRIG = [['sync', 'VS Code starts'], ['clock', 'Every 15 minutes'], ['file', 'config.json or skill.json changes']];
+  $('#trgRows').innerHTML = TRIG.map(([ic, t], i) => `<div id="trg${i}" style="position:absolute;left:0;top:${i * 58}px;display:flex;align-items:center;gap:16px;height:50px;font:600 23px/1 var(--mono);color:#132422;white-space:nowrap"><span style="position:relative;display:grid;place-items:center;width:44px;height:44px;border-radius:12px;background:#E3EFEC;color:#1F5C55;font-size:24px">${ICONS[ic]}</span><span style="position:static">${t}</span></div>`).join('');
+  const TREE = [
+    [0, 'folder', '~/MindPool/', 'pool folder'],
+    [1, 'file', 'config.json', 'where the team repository lives'],
+    [1, 'folder', 'team-skills/', 'the cloned team repository (Git)'],
+    [2, 'file', 'skill.json', 'the skills the team shares'],
+    [2, 'folder', 'mindSkills/', ''],
+    [3, 'folder', 'code-review/', ''],
+    [3, 'folder', 'pdf-tools/', ''],
+    [3, 'folder', 'writer/', ''],
+    [3, 'folder', 'planner/', ''],
+    [3, 'folder', 'translator/', ''],
+  ];
+  const ROW_H = 44;
+  const TREE_CHIP = { 2: `${ICONS.pull}2 new commits`, 6: `${ICONS.rocket}v2.1.0 → v2.3.0` };
+  TREE.forEach(([lvl, ic, name, note], i) => {
+    const extra = name === 'mindSkills/' ? `<span class="chip warn" id="nvChip">never committed</span>` : '';
+    $('#tree').appendChild(el(`<div class="node" id="tn${i}" style="left:${lvl * 40}px;top:${i * ROW_H}px">${ICONS[ic]}<span style="position:static">${name}</span>${note ? `<span class="note">${note}</span>` : ''}${extra}${TREE_CHIP[i] ? `<span class="chip ok" id="tnx${i}">${TREE_CHIP[i]}</span>` : ''}</div>`));
+  });
+  // connectors: vertical spines from each parent to its last child
+  [[0, 0, 2], [1, 2, 4], [2, 4, 9]].forEach(([lvl, from, to], k) => {
+    $('#tree').appendChild(el(`<div class="tline" id="tl${k}" style="left:${lvl * 40 + 11}px;top:${from * ROW_H + 34}px;height:${(to - from) * ROW_H - 12}px;transform:scaleY(0)"></div>`));
+  });
+  TREE.forEach(([lvl], i) => { if (lvl) $('#tree').appendChild(el(`<div class="tdash" id="td${i}" style="left:${(lvl - 1) * 40 + 11}px;top:${i * ROW_H + 21}px;transform:scaleX(0);transform-origin:0 0"></div>`)); });
+
+  // Versions: the rules table and the axis.
+  const RULES = [
+    ['"url"', 'Newest commit of the default branch', 'Updates to new commits'],
+    ['{ "branch": … }', 'Newest commit of that branch', 'Updates to new commits'],
+    ['{ "tag": … }', 'Exactly that tag', 'Stays pinned, reports newer releases'],
+    ['{ "version": … }', 'Highest tag in the range', 'Upgrades inside the range'],
+  ];
+  $('#rules').innerHTML = `<div class="r h" id="rh"><span>Source</span><span>Installs</span><span>On each sync</span></div>` +
+    RULES.map(([a, b, c], i) => `<div class="r" id="rr${i}"><code>${a}</code><span>${b}</span><span>${c}</span></div>`).join('') +
+    `<div class="ring" id="rRing" style="position:absolute;left:-8px;top:${44 + 3 * 80 - 6}px;width:856px;height:92px"></div>`;
+  const VERS = ['v1.2.0', 'v1.3.0', 'v1.4.1', 'v1.5.0', 'v2.0.0'];
+  const VX = (i) => 1040 + i * 170;
+  $('#axisWrap').innerHTML = `<div class="band" id="band" style="left:${VX(0) - 40}px;width:${VX(3) - VX(0) + 80}px"><span>"version": "^1.2.0"</span></div><div class="axis" id="axis"></div>` +
+    VERS.map((v, i) => `<div class="tick" id="tk${i}" style="left:${VX(i) - 1}px"><span>${v}</span></div>`).join('') +
+    `<div class="drop" id="vDrop" style="left:${VX(0) - 15}px;top:642px">${dropSVG}</div>` +
+    `<div class="chip warn" id="v2Chip" style="position:absolute;right:120px;top:590px">${ICONS.rocket}v2.0.0 available</div>` +
+    `<div id="v2Note" style="position:absolute;right:120px;top:772px;text-align:right;font:500 19px/1.3 var(--mono);color:#855F1C;width:260px">reported,<br>not installed</div>`;
+
+  // End: the three set-up steps, in the extension's own words.
+  const STEPS = ['Open the MindPool icon in the activity bar', 'Choose pool folder', 'Fill in the repository and branch, then Save & clone'];
+  $('#enSteps').innerHTML = STEPS.map((s, i) => `<div id="es${i}" style="position:absolute;left:0;top:${i * 72}px;display:flex;align-items:center;gap:22px;font-size:30px;color:#E6EEEC;white-space:nowrap"><span style="position:relative;display:grid;place-items:center;flex:none;width:46px;height:46px;border-radius:50%;background:#DFB15A;color:#132422;font:600 22px/1 var(--mono)">${i + 1}</span><span style="position:static">${s}</span></div>`).join('');
+
+  // Route stakes.
+  const STAKES = ['Why', 'How it works', 'Versions', 'Safety', 'Dashboard'];
+  STAKES.forEach((s, i) => $('#route').appendChild(el(`<div class="stake" id="stk${i}" style="left:${i * 420}px"><span>${s}</span></div>`)));
+
+  /* ---------- the timeline ---------- */
+  window.__ready = (async () => {
+    await document.fonts.ready;
+    await Promise.all($$('iframe').map(f => f.contentDocument && f.contentDocument.readyState === 'complete' ? Promise.resolve() : new Promise(r => f.addEventListener('load', r, { once: true }))));
+    await Promise.all($$('iframe').map(f => f.contentDocument.fonts.ready));
+    build();
+    return true;
+  })();
+
+  /**
+   * Maps an element inside a zoomed iframe to stage pixels. Probes how the browser reports
+   * rects under CSS zoom instead of assuming it. `pan` is how far (CSS px) the content was moved up.
+   */
+  function frameGeom(frameSel, zoom) {
+    const frame = $(frameSel), doc = frame.contentDocument;
+    const probe = doc.createElement('div');
+    probe.style.cssText = 'position:absolute;left:0;top:0;width:100px;height:10px';
+    doc.body.appendChild(probe);
+    const C = zoom * 100 / probe.getBoundingClientRect().width;
+    probe.remove();
+    const st = $('#stage').getBoundingClientRect(), f = frame.getBoundingClientRect();
+    const fn = (node, pad = 6, pan = 0) => {
+      const r = node.getBoundingClientRect();
+      return { x: f.left - st.left + r.left * C - pad, y: f.top - st.top + r.top * C - pan * zoom - pad, w: r.width * C + pad * 2, h: r.height * C + pad * 2 };
+    };
+    fn.frameTop = f.top - st.top; fn.frameBottom = f.bottom - st.top;
+    return fn;
+  }
+
+  /* ---------- soundtrack ----------
+     The AIgromatics sound: the instruments are the ones synthesised live in the TAiDD trailer
+     (pad, sub, bass, kick, clap, hat, tick, pluck, key, swoosh, boom, bell), rendered here
+     offline against this film's clock, then returned as a 16-bit WAV in base64. */
+  async function renderSoundtrack(SFX, from, until) {
+    const SR = 44100, LEN = until - from;
+    const ctx = new OfflineAudioContext(2, Math.ceil(SR * (LEN + .2)), SR);
+    const comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -20; comp.knee.value = 18; comp.ratio.value = 3; comp.attack.value = .004; comp.release.value = .22;
+    const out = ctx.createGain(); out.gain.value = 1.15;
+    out.connect(comp); comp.connect(ctx.destination);
+    out.gain.setValueAtTime(1.15, Math.max(0, LEN - 1.6)); out.gain.linearRampToValueAtTime(0, LEN);
+    const conv = ctx.createConvolver(), irLen = Math.floor(SR * 2.6), ir = ctx.createBuffer(2, irLen, SR);
+    let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    for (let c = 0; c < 2; c++) { const d = ir.getChannelData(c); for (let i = 0; i < irLen; i++) d[i] = (rnd() * 2 - 1) * Math.pow(1 - i / irLen, 3.2); }
+    conv.buffer = ir;
+    const verb = ctx.createGain(); verb.gain.value = .5; verb.connect(conv); conv.connect(out);
+    const noiseBuf = ctx.createBuffer(1, SR * 2, SR); const nd = noiseBuf.getChannelData(0); for (let i = 0; i < nd.length; i++) nd[i] = rnd() * 2 - 1;
+    const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
+    const voice = (wet = 0) => { const g = ctx.createGain(); g.gain.value = 0; g.connect(out); if (wet) { const s = ctx.createGain(); s.gain.value = wet; g.connect(s); s.connect(verb); } return { g }; };
+    const osc = (type, f, when, end, detune = 0) => { const o = ctx.createOscillator(); o.type = type; o.frequency.setValueAtTime(f, when); if (detune) o.detune.setValueAtTime(detune, when); o.start(when); o.stop(end); return o; };
+    const noise = (when, end) => { const s = ctx.createBufferSource(); s.buffer = noiseBuf; s.loop = true; s.start(when, rnd() * 1.5); s.stop(end); return s; };
+    const filt = (type, f, q = .7) => { const n = ctx.createBiquadFilter(); n.type = type; n.frequency.value = f; n.Q.value = q; return n; };
+    const partials = (v, when, base, list) => list.forEach(([r, a, d]) => { const g = ctx.createGain(); g.gain.setValueAtTime(a, when); g.gain.exponentialRampToValueAtTime(.0001, when + d); g.connect(v.g); osc('sine', base * r, when, when + d + .05).connect(g); });
+    const I = {
+      pad(when, len, notes, lvl = .024, cut = 1500) {
+        const atk = Math.min(.7, len * .35), end = when + len + 1.1, v = voice(.38), f = filt('lowpass', cut, .4); f.connect(v.g);
+        notes.forEach(m => [-8, 8].forEach(dt => osc('sawtooth', mtof(m), when, end + .05, dt).connect(f)));
+        v.g.gain.setValueAtTime(0, when); v.g.gain.linearRampToValueAtTime(lvl, when + atk);
+        v.g.gain.setValueAtTime(lvl, when + Math.max(atk, len)); v.g.gain.linearRampToValueAtTime(0, end);
+      },
+      sub(when, len, m, lvl = .1) {
+        const end = when + len + .6, v = voice(); osc('sine', mtof(m), when, end + .05).connect(v.g);
+        v.g.gain.setValueAtTime(0, when); v.g.gain.linearRampToValueAtTime(lvl, when + .5);
+        v.g.gain.setValueAtTime(lvl, when + Math.max(.5, len)); v.g.gain.linearRampToValueAtTime(0, end);
+      },
+      bass(when, len, m, lvl = .16) {
+        const end = when + len, v = voice(), f = filt('lowpass', 520, .8); f.connect(v.g);
+        osc('triangle', mtof(m), when, end + .1).connect(f); osc('sine', mtof(m), when, end + .1).connect(f);
+        v.g.gain.setValueAtTime(0, when); v.g.gain.linearRampToValueAtTime(lvl, when + .008);
+        v.g.gain.exponentialRampToValueAtTime(lvl * .35, when + len * .8); v.g.gain.linearRampToValueAtTime(0, end);
+      },
+      kick(when, lvl = .55) { const end = when + .45, v = voice(), o = osc('sine', 150, when, end + .05); o.frequency.exponentialRampToValueAtTime(46, when + .11); o.connect(v.g); v.g.gain.setValueAtTime(lvl, when); v.g.gain.exponentialRampToValueAtTime(.0001, end); },
+      clap(when, lvl = .11) { const end = when + .18, v = voice(.3), f = filt('bandpass', 1700, .9); f.connect(v.g); noise(when, end + .05).connect(f); v.g.gain.setValueAtTime(lvl, when); v.g.gain.exponentialRampToValueAtTime(.0001, end); },
+      hat(when, lvl = .03, open = false) { const end = when + (open ? .2 : .045), v = voice(), f = filt('highpass', 7800, .6); f.connect(v.g); noise(when, end + .05).connect(f); v.g.gain.setValueAtTime(lvl, when); v.g.gain.exponentialRampToValueAtTime(.0001, end); },
+      tick(when, hi, lvl = .06) { const end = when + .045, v = voice(.2); osc('sine', hi ? 2100 : 1500, when, end + .05).connect(v.g); v.g.gain.setValueAtTime(lvl, when); v.g.gain.exponentialRampToValueAtTime(.0001, end); },
+      pluck(when, m, lvl = .1, dec = .4, bright = 3200, wet = .3) { const end = when + dec, v = voice(wet), f = filt('lowpass', bright, .6); f.connect(v.g); osc('triangle', mtof(m), when, end + .05).connect(f); osc('sine', mtof(m + 12), when, end + .05).connect(f); v.g.gain.setValueAtTime(0, when); v.g.gain.linearRampToValueAtTime(lvl, when + .004); v.g.gain.exponentialRampToValueAtTime(.0001, end); },
+      key(when, lvl = .04) { const end = when + .03, v = voice(), f = filt('bandpass', 2600 + rnd() * 900, 2.5); f.connect(v.g); noise(when, end + .05).connect(f); v.g.gain.setValueAtTime(lvl, when); v.g.gain.exponentialRampToValueAtTime(.0001, end); },
+      press(when) { I.key(when, .07); I.pluck(when + .01, 81, .045, .15, 2400, .2); },
+      swoosh(when, len, up = true, lvl = .15) {
+        const end = when + len + (up ? .05 : .25), v = voice(.35), f = filt('bandpass', up ? 300 : 5000, 1.1); f.connect(v.g); noise(when, end + .05).connect(f);
+        f.frequency.setValueAtTime(up ? 300 : 5000, when); f.frequency.exponentialRampToValueAtTime(up ? 5500 : 260, when + len);
+        v.g.gain.setValueAtTime(.0001, when);
+        if (up) { v.g.gain.exponentialRampToValueAtTime(lvl, when + len); v.g.gain.linearRampToValueAtTime(0, end); }
+        else { v.g.gain.exponentialRampToValueAtTime(lvl, when + .06); v.g.gain.exponentialRampToValueAtTime(.0001, end); }
+      },
+      boom(when, lvl = .7) {
+        const end = when + 1.8, v = voice(.5), o = osc('sine', 95, when, end + .05); o.frequency.exponentialRampToValueAtTime(34, when + .6); o.connect(v.g);
+        const f = filt('lowpass', 240, .7), ng = ctx.createGain(); ng.gain.value = .3; f.connect(ng); ng.connect(v.g); noise(when, end + .05).connect(f);
+        v.g.gain.setValueAtTime(lvl, when); v.g.gain.exponentialRampToValueAtTime(.0001, end);
+      },
+      bell(when, m, lvl = .08) { const v = voice(.45); v.g.gain.setValueAtTime(lvl, when); partials(v, when, mtof(m), [[1, 1, 3.2], [2, .42, 2.2], [2.76, .3, 1.6], [4.07, .18, 1], [5.4, .1, .7]]); },
+      pass(when) { I.pluck(when, 86, .06, .35, 5000, .35); I.pluck(when + .06, 93, .05, .45, 5000, .35); },
+      fail(when) {
+        const end = when + .42, v = voice(.2), f = filt('lowpass', 900, .9); f.connect(v.g);
+        osc('sawtooth', mtof(50), when, end + .05).connect(f); osc('sawtooth', mtof(51), when, end + .05).connect(f);
+        v.g.gain.setValueAtTime(.0001, when); v.g.gain.exponentialRampToValueAtTime(.07, when + .01); v.g.gain.exponentialRampToValueAtTime(.0001, end);
+      },
+    };
+    const CH = { Dm: [38, 45, 50], D9: [50, 57, 61, 64, 66], Bm9: [47, 54, 57, 61, 62], G9: [43, 50, 54, 57, 59], Asus: [45, 52, 57, 59, 64], Em9: [52, 55, 59, 62, 66] };
+    const ROOT = { D9: 38, Bm9: 35, G9: 31, Asus: 33, Em9: 40 };
+    const EV = [];
+    const add = (t, fn) => { if (t >= from - 2 && t < until) EV.push([t, fn]); };
+    function groove(s, e, prog, o = {}) {
+      for (let b = 0, t = s; t < e - .1; b++, t += 2) {
+        const len = Math.min(2, e - t), name = prog[b % prog.length], root = ROOT[name];
+        add(t, w => I.pad(w, len, CH[name], o.padLvl ?? .022, o.cut ?? 1500));
+        if (o.longBass) add(t, w => I.bass(w, len * .95, root, .15));
+        for (let k = 0; k < 8; k++) {
+          const tt = t + k * .25; if (tt >= e - .02) break;
+          if (!o.longBass) add(tt, w => I.bass(w, .22, root + (k === 3 || k === 7 ? 12 : 0), k % 2 ? .1 : .14));
+          const full = tt >= (o.drumsFrom ?? 0);
+          if (o.kick && full && (o.half ? k === 0 : k === 0 || k === 4)) add(tt, w => I.kick(w));
+          if (o.clap && full && (o.half ? k === 4 : k === 2 || k === 6)) add(tt, w => I.clap(w));
+          if (o.hats && (o.half ? k % 2 === 0 : true)) add(tt, w => I.hat(w, k === 5 ? .04 : .026, k === 5));
+        }
+      }
+    }
+    // 1. Cover: the chord is already open, the pool sparkles.
+    add(0, w => I.pad(w, 5.6, CH.D9, .026, 1700)); add(0, w => I.sub(w, 5.6, 38, .09));
+    const ARP = [74, 78, 81, 86, 83, 81, 78, 76];
+    for (let t = 1.3, i = 0; t < 5.3; t += .25, i++) { const m = ARP[i % 8]; add(t, w => I.pluck(w, m, .03, .5, 4200, .4)); }
+    // 2. Problem: low drone and a clock.
+    add(6.25, w => I.boom(w, .45));
+    add(6.25, w => I.pad(w, 7.4, CH.Dm, .03, 420)); add(6.25, w => I.sub(w, 7.4, 38, .09));
+    for (let t = 6.75, k = 0; t < 13.2; t += .5, k++) { const hi = k % 2 === 0; add(t, w => I.tick(w, hi, .05)); }
+    // 3. Solution: the chord opens again.
+    add(14, w => I.pad(w, 9.8, CH.D9, .026, 2000)); add(14, w => I.sub(w, 9.8, 38, .1));
+    add(14, w => I.bell(w, 74, .07));
+    // 4-7. The groove, a bar every 2 s from the first step.
+    groove(24, 44, ['D9', 'Bm9', 'G9', 'Asus'], { hats: true, kick: true, clap: true, drumsFrom: 30 });
+    groove(44, 54, ['Bm9', 'G9', 'D9', 'Asus', 'D9'], { hats: true, kick: true, clap: true });
+    groove(54, 62, ['Em9', 'Em9', 'G9', 'Asus'], { hats: true, kick: true, clap: true, half: true, longBass: true, cut: 1200 });
+    groove(62, 71.15, ['D9', 'Bm9', 'G9', 'Asus', 'D9'], { hats: true, kick: true, clap: true });
+    // 8. End: resolve on D.
+    add(71.95, w => I.boom(w, .75));
+    add(71.95, w => I.pad(w, 8.4, CH.D9, .03, 2400)); add(71.95, w => I.sub(w, 8.4, 38, .1));
+    add(72.6, w => { I.bell(w, 62, .07); I.bell(w + .09, 69, .055); I.bell(w + .18, 74, .055); });
+    // Foley from the picture.
+    SFX.forEach(([t, kind, a]) => {
+      switch (kind) {
+        case 'drop': add(t, w => { I.bell(w, 74, .07); I.pluck(w, 86, .05, .5, 4000, .45); }); break;
+        case 'swoosh': add(t, w => I.swoosh(w, a ?? .8, true, .15)); break;
+        case 'stake': add(t, w => I.pluck(w, [74, 76, 78, 81, 83][a % 5], .05, .45, 3800, .35)); break;
+        case 'pop': add(t, w => I.pluck(w, a, .045, .25, 4500, .25)); break;
+        case 'plink': add(t, w => I.pluck(w, [78, 81, 83, 86, 88][a % 5], .05, .3, 4200, .3)); break;
+        case 'bug': add(t, w => I.pluck(w, [63, 66, 70][a % 3], .045, .22, 1800, .25)); break;
+        case 'warnpop': add(t, w => I.pluck(w, 69, .04, .25, 2600, .25)); break;
+        case 'key': add(t, w => I.key(w, .03)); break;
+        case 'press': add(t, w => I.press(w)); break;
+        case 'tick': add(t, w => I.tick(w, true, .03)); break;
+        case 'bell': add(t, w => I.bell(w, [74, 78, 81][(a - 1) % 3], .06)); break;
+        case 'pass': add(t, w => I.pass(w)); break;
+        case 'sweep': add(t, w => I.swoosh(w, .6, false, .08)); break;
+        case 'step': add(t, w => I.pluck(w, [74, 78, 81][a % 3], .05, .6, 3600, .4)); break;
+        case 'url': add(t, w => { I.bell(w, 86, .06); I.kick(w, .25); }); break;
+        default: break;
+      }
+    });
+    EV.forEach(([t, fn]) => { const w = t - from; if (w >= 0) fn(w); });
+    const buf = await ctx.startRendering();
+    // 16-bit PCM WAV
+    const n = Math.floor(SR * LEN), L = buf.getChannelData(0), R = buf.getChannelData(1);
+    const ab = new ArrayBuffer(44 + n * 4), dv = new DataView(ab);
+    const str = (o, s) => { for (let i = 0; i < s.length; i++) dv.setUint8(o + i, s.charCodeAt(i)); };
+    str(0, 'RIFF'); dv.setUint32(4, 36 + n * 4, true); str(8, 'WAVE'); str(12, 'fmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 2, true);
+    dv.setUint32(24, SR, true); dv.setUint32(28, SR * 4, true); dv.setUint16(32, 4, true); dv.setUint16(34, 16, true); str(36, 'data'); dv.setUint32(40, n * 4, true);
+    for (let i = 0, o = 44; i < n; i++, o += 4) { dv.setInt16(o, Math.max(-1, Math.min(1, L[i])) * 32767, true); dv.setInt16(o + 2, Math.max(-1, Math.min(1, R[i])) * 32767, true); }
+    const bytes = new Uint8Array(ab); let bin = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    return btoa(bin);
+  }
+
+  function build() {
+    // Measure the frames before anything is moved off its resting place.
+    const inRows = frameGeom('#rowsFrame', 1.8), inDash = frameGeom('#dashFrame', 2);
+    // Subheads sit 36 px under their headline, whatever its line count.
+    $$('[data-below]').forEach(n => { const h = $(n.dataset.below); n.style.top = `${h.offsetTop + h.offsetHeight + 36}px`; });
+    const tl = gsap.timeline({ paused: true });
+    const SFX = [];
+    const cue = (t, kind, a) => SFX.push([t, kind, a]);
+    const set = (t, target, vars) => tl.set(target, vars, t);
+    const to = (t, target, vars) => tl.to(target, { duration: .8, ease: 'expo.out', ...vars }, t);
+    const hide = (target, vars = {}) => gsap.set(target, { autoAlpha: 0, ...vars });
+    const show = (t, target, vars = {}) => to(t, target, { autoAlpha: 1, y: 0, x: 0, scale: 1, ...vars });
+    const leave = (t, target, vars = {}) => to(t, target, { autoAlpha: 0, y: -24, duration: .45, ease: 'power2.in', ...vars });
+    const scene = (id, from, until) => { set(from, id, { autoAlpha: 1 }); if (until !== undefined) set(until, id, { autoAlpha: 0 }); };
+    const words = (t, h, step = .06) => { const ws = $$('.w', $(h)); hide(ws, { y: 36 }); ws.forEach((w, i) => show(t + i * step, w, { duration: .9 })); return t + ws.length * step; };
+    const rise = (t, target, d = 28) => { hide(target, { y: d }); show(t, target); };
+    const typeLines = (t, sel, per = .14, gap = .05) => { $$(sel).forEach((ln, i) => { to(t + i * (per + gap), ln, { clipPath: 'inset(0 0% 0 0)', duration: per, ease: 'none' }); if (ln.textContent.trim().length > 1) cue(t + i * (per + gap), 'key'); }); return t + $$(sel).length * (per + gap); };
+    const press = (t, target) => { to(t, target, { scale: .95, duration: .08, ease: 'power2.out' }); to(t + .08, target, { scale: 1, duration: .25, ease: 'expo.out' }); cue(t, 'press'); };
+    const ringOn = (t, ring, box, d = .45) => { set(t, ring, { left: box.x, top: box.y, width: box.w, height: box.h, autoAlpha: 0, scale: 1.06 }); to(t, ring, { autoAlpha: 1, scale: 1, duration: d }); };
+    const ripple = (t, p, big = 1) => {
+      set(t, [`#${p}Wave1`, `#${p}Wave2`], { attr: { r: 22 }, opacity: .9 });
+      to(t, `#${p}Wave1`, { attr: { r: 44 * big }, opacity: 0, duration: 1.4, ease: 'power2.out' });
+      to(t + .18, `#${p}Wave2`, { attr: { r: 36 * big }, opacity: 0, duration: 1.3, ease: 'power2.out' });
+      to(t, `#${p}Core`, { attr: { r: 9 }, duration: .12, ease: 'power2.out' });
+      to(t + .12, `#${p}Core`, { attr: { r: 6.4 }, duration: .6 });
+    };
+    const fall = (t, p) => {
+      // the drop slides down the survey line into the pool, then a new one forms at the top
+      to(t, `#${p}Drop`, { x: -40, y: 38, scale: .35, transformOrigin: '50% 50%', duration: .55, ease: 'power3.in' });
+      set(t + .55, `#${p}Drop`, { opacity: 0, x: 0, y: -10, scale: .4 });
+      ripple(t + .55, p);
+      to(t + 1.4, `#${p}Drop`, { opacity: 1, y: 0, scale: 1, duration: .8 });
+      cue(t + .55, 'drop');
+    };
+
+    /* 1. Cover: already drawn at t = 0 */
+    fall(.7, 'cv');
+    hide('#cvSub', { y: 0 }); show(1.4, '#cvSub', { duration: 1.1 }); hide('#cvBy'); show(2.4, '#cvBy');
+    fall(3.4, 'cv');
+    cue(0, 'open');
+    // wipe into the light stage from the centre of the pool
+    const pool = { x: 1140 + 600 * .4, y: 190 + 600 * .6 };
+    set(5.45, '#wipeA', { left: pool.x, top: pool.y, autoAlpha: 1, scale: 0 });
+    to(5.45, '#wipeA', { scale: 46, duration: .8, ease: 'expo.in' });
+    cue(5.45, 'swoosh', .8);
+    scene('#s1', 0, 6.25);
+    set(6.25, '#wipeA', { autoAlpha: 0 });
+
+    /* chrome */
+    set(6.25, '#chrome', { autoAlpha: 1 }); to(71.05, '#chrome', { autoAlpha: 0, duration: .4, ease: 'power2.in' });
+    hide('#lockup', { x: -20 }); show(6.4, '#lockup');
+    const CH = [[6.25, 24], [24, 44], [44, 54], [54, 62], [62, 71.55]];
+    CH.forEach(([a, b], i) => {
+      hide(`#chap${i + 1}`, { y: 14 }); show(a + .15, `#chap${i + 1}`, { duration: .6 }); if (i < 4) leave(b - .4, `#chap${i + 1}`, { y: -14, duration: .35 });
+      to(a + .1, '#routeFill', { scaleX: i / 4, duration: .9, ease: 'power3.inOut' });
+      to(a + .5, `#stk${i}`, { backgroundColor: '#DFB15A', boxShadow: 'inset 0 0 0 2px #DFB15A, 0 0 0 7px rgba(223,177,90,.3)', duration: .35 });
+      to(a + .5, `#stk${i} span`, { color: '#132422', fontWeight: 600, duration: .35 });
+      if (i < 4) { to(b, `#stk${i}`, { backgroundColor: '#1F5C55', boxShadow: 'inset 0 0 0 2px #1F5C55, 0 0 0 0px rgba(223,177,90,0)', duration: .3 }); to(b, `#stk${i} span`, { color: '#3D524F', fontWeight: 500, duration: .3 }); }
+      if (i) cue(a + .5, 'stake', i);
+    });
+
+    /* 2. Problem 6.25 to 14 */
+    scene('#s2', 6.25, 14.1);
+    let t = words(6.5, '#pbH');
+    rise(7.7, '#pbSub');
+    $$('.lap').forEach((l, i) => { rise(7.0 + i * .22, l, 40); cue(7.0 + i * .22, 'pop', 74 + i * 3); });
+    // the copies don't match
+    const bad = $$('#laps .chip').filter(c => c.dataset.k !== 'ok');
+    bad.forEach((c, i) => { to(9.0 + i * .28, c, { scale: 1.12, duration: .12, ease: 'power2.out' }); to(9.12 + i * .28, c, { scale: 1, duration: .4 }); cue(9.0 + i * .28, c.dataset.k === 'warn' ? 'warnpop' : 'bug', i); });
+    $$('#laps .chip').filter(c => c.dataset.k === 'ok').forEach(c => to(8.9, c, { opacity: .45, duration: .4 }));
+    // they converge into one repository
+    leave(13.2, ['#pbH', '#pbSub']);
+    $$('.lap').forEach((l, i) => to(13.1 + i * .06, l, { x: 1380 - (960 + (i % 2) * 440) - 200, y: 488 - (170 + Math.floor(i / 2) * 370) - 165, scale: .3, autoAlpha: 0, duration: .75, ease: 'power3.in' }));
+    cue(13.3, 'swoosh', .7);
+
+    /* 3. Solution 14 to 24 */
+    scene('#s3', 14, 24.1);
+    hide('#soWin', { y: 40, scale: .96 }); show(14.0, '#soWin', { duration: 1 });
+    t = words(14.35, '#soH');
+    rise(15.6, '#soSub');
+    hide('#soCaret');
+    const soLines = $$('#soCode .ln');
+    set(14.6, '#soCaret', { autoAlpha: 1, left: 26, top: 22 });
+    t = typeLines(14.7, '#soCode .ln', .15, .06);
+    const CW = 19 * .6;
+    soLines.forEach((ln, i) => {
+      const t0 = 14.7 + i * .21, lead = ln.textContent.match(/^ */)[0].length;
+      set(t0, '#soCaret', { left: 26 + lead * CW, top: 18 + i * 31 + 3 });
+      to(t0, '#soCaret', { left: 26 + ln.textContent.length * CW, duration: .15, ease: 'none' });
+    });
+    to(t + .3, '#soCaret', { autoAlpha: 0, duration: .2 });
+    $$('#soCode .v').forEach((v, i) => { to(19.4 + i * .5, v, { backgroundColor: 'rgba(223, 177, 90, .42)', color: '#132422', duration: .35, ease: 'power2.out' }); cue(19.4 + i * .5, 'pop', 81 + i * 2); });
+    leave(23.4, ['#soH', '#soSub']);
+    to(23.3, '#soWin', { autoAlpha: 0, y: -30, duration: .55, ease: 'power2.in' });
+
+    /* 4. How it works 24 to 44 */
+    scene('#s4', 24, 44.1);
+    rise(24.2, '#hwK', 14); rise(24.3, '#hwSteps', 14);
+    const dotOn = (tt, n) => { to(tt, `#dot${n}`, { backgroundColor: '#DFB15A', color: '#132422', boxShadow: 'inset 0 0 0 2px #DFB15A', duration: .3 }); cue(tt, 'bell', n); };
+    const dotDone = (tt, n) => to(tt, `#dot${n}`, { backgroundColor: '#1F5C55', color: '#F0F3F3', boxShadow: 'inset 0 0 0 2px #1F5C55', duration: .3 });
+    hide(['#hwS1', '#hwS2', '#hwS3', '#trgWin']);
+    // step 1
+    dotOn(24.4, 1);
+    words(24.5, '#hwH1'); rise(25.3, '#hwS1');
+    hide('#cfgWin', { y: 30 }); show(24.8, '#cfgWin');
+    typeLines(25.5, '#cfgCode .ln', .2, .08);
+    hide('#cfgBtn', { y: 10 }); show(27.2, '#cfgBtn', { duration: .5 });
+    press(28.3, '#cfgBtn');
+    const node = (tt, i, sound = true) => { rise(tt, `#tn${i}`, 16); if ($(`#td${i}`)) to(tt - .1, `#td${i}`, { scaleX: 1, duration: .35, ease: 'power2.out' }); if (sound) cue(tt, 'tick'); };
+    node(25.0, 0); to(25.9, '#tl0', { scaleY: .5, duration: .4, ease: 'power2.out' }); node(26.1, 1);
+    // step 2
+    dotDone(30, 1); dotOn(30.1, 2);
+    leave(29.7, ['#hwH1', '#hwS1']);
+    words(30.1, '#hwH2'); rise(31.0, '#hwS2');
+    to(30.5, '#tl0', { scaleY: 1, duration: .3, ease: 'power2.out' }); node(30.7, 2); to(31.0, '#tl1', { scaleY: 1, duration: .6, ease: 'power2.out' }); node(31.3, 3); node(31.7, 4);
+    hide('#nvChip', { scale: .8 }); show(32.2, '#nvChip', { duration: .5 }); cue(32.2, 'warnpop');
+    to(32.5, '#tl2', { scaleY: 1, duration: 2.6, ease: 'power1.inOut' });
+    // the skills drop in, one by one
+    for (let k = 0; k < 5; k++) {
+      const i = 5 + k, tt = 32.9 + k * .55;
+      const d = el(`<div class="drop" id="fd${k}" style="left:${3 * 40 - 2}px;top:${i * ROW_H - 70}px;width:22px;height:30px">${dropSVG}</div>`);
+      $('#tree').appendChild(d);
+      set(tt - .35, d, { autoAlpha: 1, y: -30, scale: 1 });
+      to(tt - .35, d, { y: 30, scale: .6, duration: .35, ease: 'power3.in' });
+      set(tt, d, { autoAlpha: 0 });
+      node(tt, i, false); cue(tt, 'plink', k);
+    }
+    // step 3
+    dotDone(38, 2); dotOn(38.1, 3);
+    leave(37.7, ['#hwH2', '#hwS2']);
+    words(38.1, '#hwH3'); rise(39.0, '#hwS3');
+    to(37.9, '#cfgWin', { autoAlpha: 0, y: -16, duration: .4, ease: 'power2.in' });
+    hide('#trgWin', { y: 20 }); show(38.3, '#trgWin');
+    $$('#trgRows > div').forEach((r, i) => { hide(r, { x: -16 }); show(38.6 + i * .45, r); cue(38.6 + i * .45, 'tick'); });
+    // a sync passes through the tree: new commits, a newer skill version
+    const sync = (tt) => {
+      $$('#tree .node').forEach((n, i) => { to(tt + i * .07, n, { color: '#1F5C55', duration: .12 }); to(tt + i * .07 + .2, n, { color: '#132422', duration: .5 }); });
+      cue(tt, 'sweep');
+    };
+    sync(40.3);
+    hide(['#tnx2', '#tnx6'], { scale: .8 });
+    show(40.6, '#tnx2', { duration: .5 }); cue(40.6, 'pass');
+    show(41.4, '#tnx6', { duration: .5 }); cue(41.4, 'pass');
+    leave(43.4, ['#hwH3', '#hwS3', '#hwK', '#hwSteps', '#trgWin']);
+    to(43.4, '#tree', { autoAlpha: 0, y: -20, duration: .45, ease: 'power2.in' });
+
+    /* 5. Versions 44 to 54 */
+    scene('#s5', 44, 54.1);
+    words(44.3, '#vsH'); rise(45.3, '#vsSub');
+    rise(44.6, '#rh', 12);
+    $$('.rules .r:not(.h)').forEach((r, i) => { rise(45.0 + i * .3, r, 16); cue(45.0 + i * .3, 'tick'); });
+    ringOn(47.0, '#rRing', { x: -8, y: 44 + 3 * 80 - 6, w: 856, h: 92 }); cue(47.0, 'press');
+    hide(['#axis', '#band']); rise(47.6, '#axis', 0);
+    $$('.tick').forEach((k, i) => { rise(47.7 + i * .1, k, 10); });
+    hide('#band', { scaleX: .9 }); show(48.2, '#band', { duration: .6 });
+    hide('#vsNpm'); show(48.6, '#vsNpm');
+    // installed version climbs inside the range
+    set(48.9, '#vDrop', { autoAlpha: 1, y: -60 }); to(48.9, '#vDrop', { y: 0, duration: .5, ease: 'power3.in' }); cue(49.4, 'drop');
+    [1, 2, 3].forEach((i, k) => { to(49.9 + k * .85, '#vDrop', { left: VX(i) - 15, duration: .55, ease: 'power3.inOut' }); cue(50.4 + k * .85, 'plink', k + 1); to(50.4 + k * .85, `#tk${i} span`, { color: '#1F5C55', duration: .3 }); });
+    to(50.4, '#tk0 span', { color: '#1F5C55', duration: .3 });
+    hide(['#v2Chip', '#v2Note'], { y: 10 }); show(52.5, '#v2Chip', { duration: .6 }); show(52.8, '#v2Note', { duration: .6 }); cue(52.5, 'warnpop'); to(52.5, '#tk4 span', { color: '#855F1C', duration: .3 }); to(52.5, '#tk4', { backgroundColor: '#DFB15A', duration: .3 });
+    leave(53.5, ['#vsH', '#vsSub', '#rules', '#axisWrap', '#vsNpm']);
+
+    /* 6. Safety 54 to 62 */
+    scene('#s6', 54, 62.1);
+    words(54.3, '#sfH'); rise(55.3, '#sfSub');
+    hide('#sfWin', { y: 30 }); show(54.5, '#sfWin');
+    const rows = $('#rowsFrame').contentDocument;
+    const pdfOld = rows.getElementById('pdfOld'), pdfNew = rows.getElementById('pdfNew');
+    const dirty = rows.querySelector('.health-dirty');
+    set(56.3, '#sweep', { autoAlpha: 1, top: 50 }); to(56.3, '#sweep', { top: 490, duration: 1.3, ease: 'power1.inOut' }); set(57.6, '#sweep', { autoAlpha: 0 }); cue(56.3, 'sweep');
+    to(56.65, pdfOld, { opacity: 0, duration: .35, ease: 'power2.out' }); to(56.65, pdfNew, { opacity: 1, duration: .35, ease: 'power2.out' }); cue(56.65, 'pass');
+    // the edited skill is left alone: ring its badge, then the Reinstall button
+    const sfRing = el(`<div class="ring" id="sfRing"></div>`); $('#s6').appendChild(sfRing);
+    ringOn(57.6, '#sfRing', inRows(dirty.querySelector('.health'), 8)); cue(57.6, 'warnpop');
+    const rb = inRows(dirty.querySelector('.btn.danger'), 8);
+    to(58.7, '#sfRing', { left: rb.x, top: rb.y, width: rb.w, height: rb.h, duration: .5, ease: 'power3.inOut' });
+    to(59.8, '#sfRing', { autoAlpha: 0, duration: .3 });
+    rise(59.3, '#sfF1', 20); rise(60.0, '#sfF2', 20); cue(59.3, 'tick'); cue(60.0, 'tick');
+    leave(61.5, ['#sfH', '#sfSub', '#sfWin', '#sfF1', '#sfF2']);
+
+    /* 7. Dashboard 62 to 72 */
+    scene('#s7', 62, 72.3);
+    words(62.3, '#dbH');
+    hide('#vsc', { y: 50 }); show(62.2, '#vsc', { duration: 1.1 });
+    $$('.co').forEach((c, i) => rise(63.0 + i * .18, c, 16));
+    const dash = $('#dashFrame').contentDocument, app = dash.getElementById('app');
+    const sec = (id) => dash.querySelector(`[data-section="${id}"]`);
+    const zoom = 2, viewH = 732;
+    const cssTop = (n) => inDash(n, 0).y - inDash.frameTop;
+    const maxPan = (inDash(app, 0).h - viewH) / zoom;
+    const STOPS = [['repo', 63.6], ['changes', 65.4], ['skills', 67.2], ['activity', 69.2]];
+    let pan = 0;
+    STOPS.forEach(([id, tt], i) => {
+      const s = sec(id), p = i === 0 ? 0 : Math.max(0, Math.min(cssTop(s) / zoom - 8, maxPan));
+      if (p !== pan) { to(tt - .7, app, { y: -p, duration: .7, ease: 'power3.inOut' }); cue(tt - .7, 'swoosh', .5); }
+      pan = p;
+      const b = inDash(s, 5, p), y0 = Math.max(b.y, inDash.frameTop + 4), y1 = Math.min(b.y + b.h, inDash.frameBottom - 4);
+      const box = { x: b.x, y: y0, w: b.w, h: y1 - y0 };
+      if (i === 0) ringOn(tt, '#dbRing', box); else to(tt - .1, '#dbRing', { left: box.x, top: box.y, width: box.w, height: box.h, duration: .5, ease: 'power3.inOut' });
+      to(tt, `#co${i + 1} .bar`, { scaleY: 1, duration: .5 });
+      if (i > 0) to(tt, `#co${i} .bar`, { scaleY: 0, transformOrigin: '50% 100%', duration: .4 });
+      to(tt, `#co${i + 1} h3`, { color: '#855F1C', duration: .3 });
+      if (i > 0) to(tt, `#co${i} h3`, { color: '#1F5C55', duration: .3 });
+      cue(tt, 'press');
+    });
+    const cp = Array.from(dash.querySelectorAll('.btn')).find(b => /Commit & Push/.test(b.textContent));
+    if (cp) press(66.4, cp);
+    to(70.9, '#dbRing', { autoAlpha: 0, duration: .3 });
+    // into the end card
+    set(71.15, '#wipeB', { left: 1450, top: 526, autoAlpha: 1, scale: 0 });
+    to(71.15, '#wipeB', { scale: 46, duration: .8, ease: 'expo.in' });
+    cue(71.15, 'swoosh', .8);
+    set(72.0, '#wipeB', { autoAlpha: 0 });
+
+    /* 8. End 72 to 80.5 */
+    scene('#s8', 71.95);
+    words(72.2, '#enH', .07);
+    $$('#enSteps > div').forEach((s, i) => { rise(73.3 + i * .4, s, 18); cue(73.3 + i * .4, 'step', i); });
+    hide('#enMark', { scale: .9 }); show(72.3, '#enMark', { duration: 1.2 });
+    fall(73.4, 'en');
+    hide('#enUrl', { y: 24 }); show(75.6, '#enUrl'); cue(75.6, 'url');
+    rise(76.2, '#enMeta', 16); rise(76.7, '#enBy', 16);
+    fall(77.4, 'en');
+    tl.to({}, { duration: .01 }, 80.5);
+
+    window.__tl = tl;
+    window.__duration = 80.5;
+    window.__renderAudio = (from, until) => renderSoundtrack(SFX, from, until ?? 80.5);
+    window.SFX = SFX.sort((a, b) => a[0] - b[0]);
+    window.__frame = (t) => { tl.seek(t, false); };
+    __frame(0);
+
+    if (location.search.includes('preview')) {
+      document.body.classList.add('preview');
+      const sc = $('#scrub'), tm = $('#time'), pl = $('#play');
+      let playing = false, t0 = 0, s0 = 0;
+      const fit = () => { const k = Math.min(innerWidth / 1920, (innerHeight - 50) / 1080); document.body.style.transform = `scale(${k})`; document.body.style.transformOrigin = '0 0'; };
+      fit(); addEventListener('resize', fit);
+      sc.oninput = () => { const v = sc.value / 1000 * window.__duration; __frame(v); tm.textContent = v.toFixed(2); };
+      pl.onclick = () => { playing = !playing; t0 = performance.now(); s0 = tl.time(); pl.textContent = playing ? 'Pause' : 'Play'; const loop = () => { if (!playing) return; const v = Math.min(window.__duration, s0 + (performance.now() - t0) / 1000); __frame(v); sc.value = v / window.__duration * 1000; tm.textContent = v.toFixed(2); if (v < window.__duration) requestAnimationFrame(loop); }; loop(); };
+    }
+  }
+})();
+</script>
+</body>
+</html>
