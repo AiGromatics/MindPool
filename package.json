@@ -1,7 +1,7 @@
 {
     "name": "mindpool",
     "displayName": "MindPool",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "description": "MindPool is a small tool to sync your team AI skills in one go, from a private Git repository.",
     "publisher": "aigromatics",
     "author": "AiGromatics",
