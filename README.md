@@ -38,7 +38,8 @@ That's it. MindPool writes `config.json`, clones the repository and installs the
     "repository": "git@github.com:acme/team-skills.git",
     "branch": "main",
     "tag": "v1.4.0",
-    "directory": "team-skills"
+    "directory": "team-skills",
+    "linkSkillsTo": "~/.claude/skills"
 }
 ```
 
@@ -49,6 +50,25 @@ That's it. MindPool writes `config.json`, clones the repository and installs the
 | `branch`     | ✔       | Branch to track. New commits are fast-forwarded automatically.                                                  |
 | `tag`        |          | Release tag to pin. The checkout becomes**read-only**, and newer releases are offered with a one-click upgrade. |
 | `directory`  |          | Folder name for the clone. Defaults to the repository name.                                                     |
+| `linkSkillsTo` |        | Folder, or list of folders, where every installed skill gets a link. See [Skill links](#skill-links).          |
+
+### Skill links
+
+Some AI tools only find skills one level deep. Claude Code, for example, reads
+`~/.claude/skills/<name>/SKILL.md`, so it never sees `team-skills/mindSkills/<name>/`. Set
+`linkSkillsTo` and MindPool keeps one link per skill in that folder: a symlink, or a junction on
+Windows.
+
+- A skill with a `SKILL.md` at its root is linked under its `skill.json` name. A repository that
+  holds several skills, in `skills/<name>/` (like superpowers) or in `<name>/`, gets one link
+  per skill.
+- `~` and `${userHome}` work. A relative path starts at the pool folder, so `"."` links the
+  skills next to `config.json` when the pool folder is itself `~/.claude/skills`.
+- Links follow `skill.json`: they're added, repointed and removed on every sync, and removing
+  `linkSkillsTo` removes them.
+- MindPool only touches links that point into `mindSkills/`. A real folder, or someone else's
+  link, with the same name is left alone and reported in the **Skills** card.
+- Folders inside the team repository are refused, because the links would show up as changes.
 
 ## `skill.json`
 
@@ -176,6 +196,7 @@ src/
     │   ├── engine.ts            sync orchestration and the serialised operation queue
     │   ├── poolRepository.ts    clone / fetch / fast-forward / pull / commit / push / tags
     │   ├── skillManager.ts      resolve versions (ls-remote) and shallow installs into mindSkills
+    │   ├── links.ts             linkSkillsTo: one link per skill (e.g. in ~/.claude/skills)
     │   ├── config.ts            config.json
     │   ├── manifest.ts          skill.json
     │   ├── semver.ts            npm-style ranges

@@ -2,10 +2,12 @@ import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import { CONFIG_FILE, readConfig, writeConfig } from './config.ts';
 import { shortSha, type GitExec, type RemoteRefs } from './git.ts';
+import { resolveLinkTargets, syncSkillLinks, type LinkResult } from './links.ts';
 import { createManifest, MANIFEST_FILE, readManifest, removeSkill, SKILLS_DIR, upsertSkill } from './manifest.ts';
 import { PoolRepository } from './poolRepository.ts';
 import { inspectRemote, resolveSpec, SkillDirtyError, SkillManager } from './skillManager.ts';
 import type {
+    LinkState,
     LogEntry,
     LogLevel,
     ManifestEntry,
@@ -62,6 +64,16 @@ function sameSpec(a: SkillSpec | undefined, b: SkillSpec | undefined): boolean {
 
 function errorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
+}
+
+/** Groups link paths by folder for the log: `[folder, "a, b"]` (or `"12 skills"`). */
+function linkGroups(links: readonly string[]): [string, string][] {
+    const groups = new Map<string, string[]>();
+    for (const link of links) {
+        const dir = path.dirname(link);
+        groups.set(dir, [...(groups.get(dir) ?? []), path.basename(link)]);
+    }
+    return [...groups].map(([dir, names]) => [dir, names.length > 4 ? `${names.length} skills` : names.join(', ')]);
 }
 
 /**
@@ -322,6 +334,7 @@ export class MindPoolEngine {
             skills: [],
             orphans: [],
             skillsDir: undefined,
+            links: undefined,
             manifest: { exists: false },
         };
         if (!result.exists) {
@@ -410,7 +423,43 @@ export class MindPoolEngine {
                 orphans.push(name);
             }
         }
-        this.patch({ skills, orphans, manifest, skillsDir: this.skills.skillsDir });
+        // Like pruning, links are only reconciled against a valid skill.json.
+        const links = manifestResult.manifest ? await this.syncLinks(skills) : this.current.links;
+        this.patch({ skills, orphans, manifest, skillsDir: this.skills.skillsDir, links });
+    }
+
+    /** Keeps the links asked by `linkSkillsTo` in step with the installed skills. Never throws. */
+    private async syncLinks(skills: readonly SkillStatus[]): Promise<LinkState | undefined> {
+        if (!this.config || !this.repo || !this.skills) {
+            return undefined;
+        }
+        const requested = resolveLinkTargets(this.config.linkSkillsTo, { poolFolder: this.poolFolder, repoDir: this.repo.dir });
+        // With no folder to link into this run only removes links left by an earlier config.
+        const installed = requested.targets.length === 0 ? [] : skills.filter((s) => s.spec && s.installedCommit).map((s) => ({ name: s.name, dir: s.path }));
+        let result: LinkResult;
+        try {
+            result = await syncSkillLinks({ skillsDir: this.skills.skillsDir, targets: requested.targets, skills: installed });
+        } catch (error) {
+            result = { targets: [], created: [], removed: [], problems: [`Cannot update skill links: ${errorMessage(error)}`] };
+        }
+        for (const [dir, names] of linkGroups(result.created)) {
+            this.log('success', `Linked ${names} into ${dir}`);
+        }
+        for (const [dir, names] of linkGroups(result.removed)) {
+            this.log('info', `Unlinked ${names} from ${dir}`);
+        }
+        // Problems repeat on every sync: only log the new ones.
+        const problems = [...requested.problems, ...result.problems];
+        const known = new Set(this.current.links?.problems ?? []);
+        for (const problem of problems) {
+            if (!known.has(problem)) {
+                this.log('warn', problem);
+            }
+        }
+        if (this.config.linkSkillsTo.length === 0 && problems.length === 0) {
+            return undefined;
+        }
+        return { targets: result.targets, problems };
     }
 
     private async evaluateSkill(entry: ManifestEntry, context: SkillContext): Promise<SkillStatus> {

@@ -34,7 +34,7 @@ function readyState(overrides: Partial<PoolState> = {}): PoolState {
     return {
         phase: 'ready',
         poolFolder: '/home/me/pool',
-        config: { repository: 'https://github.com/acme/team-skills.git', branch: 'main', directory: 'team-skills' },
+        config: { repository: 'https://github.com/acme/team-skills.git', branch: 'main', directory: 'team-skills', linkSkillsTo: [] },
         repo: {
             path: '/home/me/pool/team-skills',
             cloned: true,
@@ -66,6 +66,21 @@ function ui(overrides: Partial<UiState> = {}): UiState {
 }
 
 describe('renderApp', () => {
+    test('skill links: where they are, problems escaped, and the form field', () => {
+        const html = renderApp(
+            readyState({ links: { targets: [{ path: '/home/me/.claude/skills', linked: 2 }], problems: ['<b>nskill</b> already exists'] } }),
+            ui(),
+            NOW,
+        );
+        assert.match(html, /2 skills linked into <span class="path" title="\/home\/me\/.claude\/skills">~\/.claude\/skills<\/span>/);
+        assert.match(html, /Skill links need attention/);
+        assert.ok(html.includes('&lt;b&gt;nskill&lt;/b&gt; already exists'));
+        assert.ok(!renderApp(readyState(), ui(), NOW).includes('linked into'), 'nothing shown when links are off');
+
+        const form = renderApp(readyState({ config: { repository: 'https://x/y.git', branch: 'main', directory: 'y', linkSkillsTo: ['~/.claude/skills', '/opt/s'] } }), ui({ editingConfig: true }), NOW);
+        assert.match(form, /id="cfg-links"[^>]*value="~\/.claude\/skills, \/opt\/s"/);
+    });
+
     test('loading state before the first message', () => {
         const html = renderApp(undefined, ui(), NOW);
         assert.match(html, /Waking up MindPool/);
@@ -256,7 +271,11 @@ describe('parseWebviewMessage', () => {
         assert.deepEqual(parseWebviewMessage({ type: 'commit', message: 'm', files: ['a'], push: true }), { type: 'commit', message: 'm', files: ['a'], push: true });
         assert.deepEqual(parseWebviewMessage({ type: 'saveConfig', config: { repository: 'u', branch: 'main', tag: '  ', directory: 'd' } }), {
             type: 'saveConfig',
-            config: { repository: 'u', branch: 'main', tag: undefined, directory: 'd' },
+            config: { repository: 'u', branch: 'main', tag: undefined, directory: 'd', linkSkillsTo: undefined },
+        });
+        assert.deepEqual(parseWebviewMessage({ type: 'saveConfig', config: { repository: 'u', branch: 'main', linkSkillsTo: ['~/.claude/skills'] } }), {
+            type: 'saveConfig',
+            config: { repository: 'u', branch: 'main', tag: undefined, directory: undefined, linkSkillsTo: ['~/.claude/skills'] },
         });
         assert.deepEqual(parseWebviewMessage({ type: 'addSkill', name: 'n', spec: { repository: 'u', kind: 'tag', value: 'v1' } }), {
             type: 'addSkill',
@@ -276,6 +295,8 @@ describe('parseWebviewMessage', () => {
             { type: 'commit', message: 1, files: [] },
             { type: 'commit', message: 'x', files: [1] },
             { type: 'saveConfig', config: null },
+            { type: 'saveConfig', config: { repository: 'u', branch: 'main', linkSkillsTo: '~/.claude/skills' } },
+            { type: 'saveConfig', config: { repository: 'u', branch: 'main', linkSkillsTo: [3] } },
             { type: 'inspectRemote', url: 'u', requestId: '1', purpose: 'config' },
             { type: 'addSkill', name: 'n', spec: { repository: 'u', kind: 'sudo' } },
             { type: 'removeSkill' },

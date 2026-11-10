@@ -56,7 +56,8 @@ and `${workspaceFolder}`. Each machine can set its own pool folder.
     "repository": "https://github.com/AiGromatics/Skills.git",
     "branch": "main",
     "tag": "v1.0.0",
-    "directory": "Skills"
+    "directory": "Skills",
+    "linkSkillsTo": "~/.claude/skills"
 }
 ```
 
@@ -66,6 +67,7 @@ and `${workspaceFolder}`. Each machine can set its own pool folder.
 | `branch`     | yes      | The branch to track. It is always required, even with a tag: the clone starts from it. |
 | `tag`        | no       | A release tag to pin. The checkout becomes **read-only** (see [§3.2](#32-release-mode-tag)). |
 | `directory`  | no       | The folder name for the clone. It defaults to the repository name, and it can't be `mindSkills`. |
+| `linkSkillsTo` | no     | A folder, or a list of folders, that gets one link per installed skill (see [§6.1](#61-skill-links)). `~` and `${userHome}` work, and a relative path starts at the pool folder. |
 
 The dashboard shows a different screen depending on the state of the pool folder:
 
@@ -215,6 +217,39 @@ file is a local ignore list, so no tracked file has to change. The team reposito
 As a result, **Changes**, **Commit** and **Push** only ever see the team's settings
 (`skill.json` and anything else the team adds), never the downloaded skills.
 
+### 6.1 Skill links
+
+Keeping skills inside the team repository has a downside: tools that only scan one level deep
+can't find them. Claude Code reads `~/.claude/skills/<name>/SKILL.md` (and accepts a symlink as
+`<name>`). It doesn't see `<pool>/<repo>/mindSkills/<name>/`. `linkSkillsTo` bridges the gap.
+
+At the end of every skills pass (sync, install, remove, offline refresh), and only when
+`skill.json` is valid, MindPool reconciles each configured folder:
+
+1. **Find the skills** in every installed skill folder:
+   - a `SKILL.md` at the root makes one skill, linked under its `skill.json` name;
+   - otherwise each `skills/<name>/` with a `SKILL.md` (the plugin layout used by superpowers);
+   - otherwise each direct `<name>/` sub-folder with a `SKILL.md`.
+
+   `SKILL.md` is matched case-insensitively. When two entries provide the same name, the first
+   one in `skill.json` wins and the clash is reported.
+2. **Review existing links.** A symlink that points into `mindSkills/` belongs to MindPool. It is
+   kept if it's still right, and removed if its skill is gone or moved, including when it dangles.
+3. **Create the missing links:** a symlink, or a junction on Windows (no admin rights needed),
+   with an absolute target.
+4. **Clean up old folders.** The folders of the last run are saved in `mindSkills/.links.json`.
+   A folder that has left `linkSkillsTo` gets its MindPool links removed, so removing the option
+   removes every link.
+
+Safety rules:
+
+- **Nothing MindPool didn't create is touched.** A real folder, a file, or a symlink to somewhere
+  else with the same name is reported in the **Skills** card. It is never replaced.
+- **Folders inside the team repository are refused.** The links would show up as changes to
+  commit. `${workspaceFolder}` is refused too, because every window shares `config.json`.
+- Problems are logged once, when they first appear, and stay visible in the **Skills** card
+  until they're fixed.
+
 ## 7. User interface
 
 - **Dashboard** in the activity bar, with these cards:
@@ -263,7 +298,10 @@ As a result, **Changes**, **Commit** and **Push** only ever see the team's setti
   - URLs and refs can't start with `-`.
   - The `ext::` and `fd::` Git transports are refused.
   - Skill and folder names are restricted to safe characters.
-  - Every path is checked to stay inside the pool folder.
+  - Every path is checked to stay inside the pool folder. The only exception is `linkSkillsTo`,
+    which is read from the local `config.json` only, never from `skill.json`, so teammates can't
+    choose where links go. Link names come from validated skill names and skill folder names,
+    so a link can't escape its folder. Links only ever replace or remove MindPool's own links.
 - **The dashboard webview** runs under a strict Content Security Policy (scripts only with a
   nonce), escapes everything it displays, and validates every message it sends to the extension.
 

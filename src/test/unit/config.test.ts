@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import * as path from 'node:path';
 import { after, describe, test } from 'node:test';
 import { parseConfig, readConfig, validateConfig, writeConfig } from '../../VsCodeExtension/core/config.ts';
 import { Sandbox } from '../helpers.ts';
@@ -10,8 +11,19 @@ after(() => sandbox.cleanup());
 describe('validateConfig', () => {
     test('accepts a minimal config and derives the clone folder', () => {
         const result = validateConfig({ repository: 'git@github.com:acme/team-skills.git', branch: 'main' });
-        assert.deepEqual(result.config, { repository: 'git@github.com:acme/team-skills.git', branch: 'main', tag: undefined, directory: 'team-skills' });
+        assert.deepEqual(result.config, { repository: 'git@github.com:acme/team-skills.git', branch: 'main', tag: undefined, directory: 'team-skills', linkSkillsTo: [] });
         assert.equal(result.error, undefined);
+    });
+
+    test('linkSkillsTo takes one folder or a list, trimmed and without duplicates', () => {
+        const base = { repository: 'https://x/y.git', branch: 'main' };
+        assert.deepEqual(validateConfig({ ...base, linkSkillsTo: ' ~/.claude/skills ' }).config?.linkSkillsTo, ['~/.claude/skills']);
+        assert.deepEqual(validateConfig({ ...base, linkSkillsTo: ['~/.claude/skills', '', '~/.claude/skills', '/opt/skills'] }).config?.linkSkillsTo, ['~/.claude/skills', '/opt/skills']);
+        assert.deepEqual(validateConfig({ ...base, linkSkillsTo: '' }).config?.linkSkillsTo, []);
+        const wrong = validateConfig({ ...base, linkSkillsTo: [1] });
+        assert.equal(wrong.config, undefined);
+        assert.match(wrong.error ?? '', /"linkSkillsTo" must be a folder path or a list/);
+        assert.match(validateConfig({ ...base, linkSkillsTo: { a: 1 } }).error ?? '', /linkSkillsTo/);
     });
 
     test('keeps tag and directory', () => {
@@ -65,6 +77,19 @@ describe('readConfig / writeConfig', () => {
         assert.equal(read.exists, true);
         assert.equal(read.config?.repository, 'https://example.com/acme/skills.git');
         assert.equal(typeof read.text, 'string');
+    });
+
+    test('writes linkSkillsTo as a string for one folder, a list for more, and drops it when empty', async () => {
+        const folder = sandbox.path('pool-links');
+        const values = { repository: 'https://example.com/acme/skills.git', branch: 'main' };
+        const raw = (): Record<string, unknown> => JSON.parse(readFileSync(path.join(folder, 'config.json'), 'utf8'));
+        const one = await writeConfig(folder, { ...values, linkSkillsTo: ['~/.claude/skills'] });
+        assert.deepEqual(one.linkSkillsTo, ['~/.claude/skills']);
+        assert.equal(raw()['linkSkillsTo'], '~/.claude/skills');
+        await writeConfig(folder, { ...values, linkSkillsTo: ['~/.claude/skills', '~/.codex/skills'] });
+        assert.deepEqual(raw()['linkSkillsTo'], ['~/.claude/skills', '~/.codex/skills']);
+        await writeConfig(folder, { ...values, linkSkillsTo: [] });
+        assert.equal('linkSkillsTo' in raw(), false);
     });
 
     test('refuses to write an invalid config', async () => {

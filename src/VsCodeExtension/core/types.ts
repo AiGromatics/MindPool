@@ -13,6 +13,11 @@ export interface PoolConfigFile {
     tag?: string;
     /** Optional folder name (inside the pool folder) where the repository is cloned. */
     directory?: string;
+    /**
+     * Optional folder(s) where every installed skill gets a link, e.g. `~/.claude/skills`, so AI
+     * tools that only look one level deep find the skills downloaded in mindSkills.
+     */
+    linkSkillsTo?: string | string[];
 }
 
 /** Validated config with every default resolved. */
@@ -21,6 +26,8 @@ export interface PoolConfig {
     branch: string;
     tag?: string;
     directory: string;
+    /** Folders from `linkSkillsTo`, as written (not expanded yet). Empty when links are off. */
+    linkSkillsTo: string[];
 }
 
 /**
@@ -119,6 +126,20 @@ export interface LogEntry {
     message: string;
 }
 
+export interface LinkTargetStatus {
+    /** Absolute folder that receives the links. */
+    path: string;
+    /** Skill links currently in place there. */
+    linked: number;
+}
+
+/** Skill links requested by `linkSkillsTo` in config.json. */
+export interface LinkState {
+    targets: LinkTargetStatus[];
+    /** Links that could not be created (name taken, no SKILL.md, invalid folder, …). */
+    problems: string[];
+}
+
 export interface ManifestInfo {
     exists: boolean;
     path?: string;
@@ -140,6 +161,8 @@ export interface PoolState {
     /** Folders inside mindSkills that are no longer declared in skill.json. */
     orphans: string[];
     skillsDir?: string;
+    /** Set when config.json has `linkSkillsTo`. */
+    links?: LinkState;
     busy?: string;
     lastSync?: string;
     lastError?: string;

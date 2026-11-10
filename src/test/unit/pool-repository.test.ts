@@ -13,7 +13,7 @@ const run = createGit();
 
 function setup(name: string): { remote: ReturnType<Sandbox['remote']>; repo: PoolRepository; config: PoolConfig } {
     const remote = sandbox.remote(name, { 'skill.json': '{"skills":{}}\n', 'README.md': '# team\n' });
-    const config: PoolConfig = { repository: remote.url, branch: 'main', directory: name };
+    const config: PoolConfig = { repository: remote.url, branch: 'main', directory: name, linkSkillsTo: [] };
     const repo = new PoolRepository(run, sandbox.path('pools', name, name));
     return { remote, repo, config };
 }

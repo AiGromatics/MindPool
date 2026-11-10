@@ -4,7 +4,7 @@
  * and inlined into the extension bundle.
  */
 import type { HostCommand, HostToWebview, PoolState, RemotePurpose, WebviewToHost } from '../core/types.ts';
-import { configDraftFromState, initialUiState, renderApp, type ConfigDraft, type SkillFormKind, type UiState } from './render.ts';
+import { configDraftFromState, initialUiState, renderApp, splitLinkFolders, type ConfigDraft, type SkillFormKind, type UiState } from './render.ts';
 
 interface VsCodeApi {
     postMessage(message: WebviewToHost): void;
@@ -27,6 +27,10 @@ function restoreUi(): UiState {
     if (saved && typeof saved === 'object') {
         const restored = { ...base, ...(saved as Partial<UiState>), remote: {} };
         restored.skillDraft = { ...base.skillDraft, ...restored.skillDraft };
+        if (restored.configDraft) {
+            // Drafts saved by an older version have no linkSkillsTo field.
+            restored.configDraft = { ...restored.configDraft, linkSkillsTo: restored.configDraft.linkSkillsTo ?? '' };
+        }
         return restored;
     }
     return base;
@@ -116,7 +120,7 @@ function focus(id: string): void {
 
 function configDraft(): ConfigDraft {
     if (!ui.configDraft) {
-        ui.configDraft = state ? configDraftFromState(state) : { repository: '', branch: 'main', tag: '', directory: '' };
+        ui.configDraft = state ? configDraftFromState(state) : { repository: '', branch: 'main', tag: '', directory: '', linkSkillsTo: '' };
     }
     return ui.configDraft;
 }
@@ -203,6 +207,7 @@ function saveConfig(override?: Partial<ConfigDraft>): void {
             branch: d.branch.trim(),
             tag: d.tag.trim() || undefined,
             directory: d.directory.trim() || undefined,
+            linkSkillsTo: splitLinkFolders(d.linkSkillsTo),
         },
     });
 }

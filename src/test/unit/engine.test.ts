@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import * as path from 'node:path';
 import { after, describe, test } from 'node:test';
 import { MindPoolEngine } from '../../VsCodeExtension/core/engine.ts';
@@ -312,5 +312,67 @@ describe('MindPoolEngine: concurrency', () => {
         assert.equal(w.engine.state.busy, undefined);
         assert.ok(busyLabels.has('Syncing'));
         assert.ok(w.engine.state.skills.every((s) => s.health === 'ok'));
+    });
+});
+
+describe('MindPoolEngine: skill links (linkSkillsTo)', () => {
+    function linkWorld(linkSkillsTo: unknown): World {
+        const w = world();
+        writeFileSync(path.join(w.pool, 'config.json'), JSON.stringify({ repository: w.team.url, branch: 'main', directory: 'team', linkSkillsTo }));
+        return w;
+    }
+    const isLink = (p: string): boolean => existsSync(p) && lstatSync(p).isSymbolicLink();
+
+    test('links the installed skills, follows skill.json and cleans up when the option is removed', async () => {
+        const target = sandbox.path('homes', `h${counter + 1}`, '.claude', 'skills');
+        const w = linkWorld(target);
+        let state = await w.engine.sync();
+        assert.deepEqual(state.links, { targets: [{ path: target, linked: 2 }], problems: [] });
+        assert.equal(readFileSync(path.join(target, 'writer', 'SKILL.md'), 'utf8'), '# Writer\n');
+        assert.ok(isLink(path.join(target, 'reviewer')));
+        assert.ok(state.log.some((l) => l.message === `Linked writer, reviewer into ${target}`));
+        assert.deepEqual(state.repo?.changes, [], 'links never show up as changes');
+
+        const logSize = state.log.length;
+        state = await w.engine.sync();
+        assert.equal(state.log.length, logSize, 'a second sync changes nothing');
+
+        w.team.commit({ 'skill.json': skillJson({ writer: { repository: w.writer.url, version: '^1.0.0' } }) }, 'drop reviewer');
+        state = await w.engine.sync();
+        assert.equal(isLink(path.join(target, 'reviewer')), false, 'pruned skill is unlinked');
+        assert.ok(state.log.some((l) => l.message === `Unlinked reviewer from ${target}`));
+        assert.deepEqual(state.links?.targets, [{ path: target, linked: 1 }]);
+
+        writeFileSync(path.join(w.pool, 'config.json'), JSON.stringify({ repository: w.team.url, branch: 'main', directory: 'team' }));
+        state = await w.engine.sync();
+        assert.equal(isLink(path.join(target, 'writer')), false, 'links removed with the option');
+        assert.equal(state.links, undefined);
+    });
+
+    test('issue #1 layout: a pool folder inside .claude/skills links the skills next to config.json', async () => {
+        const w = linkWorld('.');
+        const state = await w.engine.sync();
+        assert.deepEqual(state.links?.problems, []);
+        assert.equal(readFileSync(path.join(w.pool, 'writer', 'SKILL.md'), 'utf8'), '# Writer\n');
+        assert.equal(readFileSync(path.join(w.pool, 'reviewer', 'SKILL.md'), 'utf8'), '# Reviewer\n');
+        assert.equal(existsSync(path.join(w.pool, 'config.json')), true);
+    });
+
+    test('refuses a folder inside the team repository and reports it once', async () => {
+        const w = linkWorld('team/links');
+        let state = await w.engine.sync();
+        assert.equal(state.links?.targets.length, 0);
+        assert.match(state.links?.problems[0] ?? '', /inside the team repository/);
+        assert.equal(existsSync(path.join(w.repoDir, 'links')), false);
+        const warnings = state.log.filter((l) => l.level === 'warn').length;
+        state = await w.engine.sync();
+        assert.equal(state.log.filter((l) => l.level === 'warn').length, warnings, 'not logged again');
+    });
+
+    test('an invalid linkSkillsTo makes config.json invalid', async () => {
+        const w = linkWorld(42);
+        const state = await w.engine.sync();
+        assert.equal(state.phase, 'invalidConfig');
+        assert.match(state.configError ?? '', /linkSkillsTo/);
     });
 });

@@ -16,6 +16,8 @@ export interface ConfigDraft {
     branch: string;
     tag: string;
     directory: string;
+    /** `linkSkillsTo` folders, comma-separated. */
+    linkSkillsTo: string;
 }
 
 export interface SkillDraft {
@@ -198,7 +200,16 @@ export function configDraftFromState(state: PoolState): ConfigDraft {
         branch: draft.branch ?? state.config?.branch ?? 'main',
         tag: draft.tag ?? state.config?.tag ?? '',
         directory: draft.directory ?? '',
+        linkSkillsTo: ([] as string[]).concat(draft.linkSkillsTo ?? state.config?.linkSkillsTo ?? []).join(', '),
     };
+}
+
+/** Splits the comma-separated form value back into folders. */
+export function splitLinkFolders(value: string): string[] {
+    return value
+        .split(',')
+        .map((v) => v.trim())
+        .filter(Boolean);
 }
 
 function renderConfigForm(state: PoolState, ui: UiState): string {
@@ -221,6 +232,8 @@ function renderConfigForm(state: PoolState, ui: UiState): string {
         `</div>` +
         `<label class="field"><span>Folder name <em>optional</em></span><input id="cfg-directory" data-field="config.directory" type="text" spellcheck="false" placeholder="derived from the URL" value="${esc(draft.directory)}"></label>` +
         `<p class="muted small">${icon('lock')} With a release tag the repository is pinned to that release and becomes read-only.</p>` +
+        `<label class="field"><span>Link skills into <em>optional</em></span><input id="cfg-links" data-field="config.linkSkillsTo" type="text" spellcheck="false" placeholder="~/.claude/skills" value="${esc(draft.linkSkillsTo)}"></label>` +
+        `<p class="muted small">${icon('link')} Each skill gets a link in this folder, so tools like Claude Code find it. Separate several folders with commas.</p>` +
         datalist('cfg-branches', info?.branches ?? []) +
         datalist('cfg-tags', info?.tags ?? []) +
         `<div class="toolbar">` +
@@ -496,6 +509,24 @@ function renderSkillForm(ui: UiState): string {
     );
 }
 
+function renderLinks(state: PoolState, ui: UiState): string {
+    const links = state.links;
+    if (!links) {
+        return '';
+    }
+    const folder = (t: { path: string }): string => `<span class="path" title="${esc(t.path)}">${esc(tildify(t.path, ui.home))}</span>`;
+    const only = links.targets.length === 1 ? links.targets[0] : undefined;
+    const where = only
+        ? `${only.linked} skill${only.linked === 1 ? '' : 's'} linked into ${folder(only)}.`
+        : `Skills linked into ${links.targets.map((t) => `${folder(t)} (${t.linked})`).join(', ')}.`;
+    return (
+        (links.targets.length > 0 ? `<p class="muted small links">${icon('link')} ${where}</p>` : '') +
+        (links.problems.length > 0
+            ? banner('warn', 'alert', `<b>Skill links need attention.</b> ${links.problems.map((p) => esc(p)).join('<br>')}`, command('openConfig', { label: 'Open config.json', iconName: 'file' }))
+            : '')
+    );
+}
+
 function renderSkills(state: PoolState, ui: UiState): string {
     const repo = state.repo as RepoStatus;
     const readOnly = repo.readOnly;
@@ -536,6 +567,7 @@ function renderSkills(state: PoolState, ui: UiState): string {
     } else if (filter) {
         parts.push(`<p class="empty">No skill matches “${esc(ui.filter)}”.</p>`);
     }
+    parts.push(renderLinks(state, ui));
     if (state.orphans.length > 0) {
         parts.push(
             banner(

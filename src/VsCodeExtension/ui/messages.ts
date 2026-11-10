@@ -38,7 +38,14 @@ export function parseWebviewMessage(value: unknown): WebviewToHost | undefined {
                 return undefined;
             }
             const optional = (key: string): string | undefined => (str(c[key], 255) && (c[key] as string).trim() ? (c[key] as string) : undefined);
-            return { type: 'saveConfig', config: { repository: c['repository'], branch: c['branch'], tag: optional('tag'), directory: optional('directory') } };
+            const links = c['linkSkillsTo'];
+            if (links !== undefined && (!Array.isArray(links) || links.length > 50 || !links.every((l) => str(l, 4096)))) {
+                return undefined;
+            }
+            return {
+                type: 'saveConfig',
+                config: { repository: c['repository'], branch: c['branch'], tag: optional('tag'), directory: optional('directory'), linkSkillsTo: links as string[] | undefined },
+            };
         }
         case 'inspectRemote':
             if (!str(m['url']) || typeof m['requestId'] !== 'number' || (m['purpose'] !== 'config' && m['purpose'] !== 'skill')) {

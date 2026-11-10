@@ -16,6 +16,18 @@ function asOptionalString(value: unknown): string | undefined {
     return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined;
 }
 
+/** `linkSkillsTo` accepts one folder or a list of folders. Empty entries and duplicates are dropped. */
+export function parseLinkList(value: unknown): { values: string[]; error?: string } {
+    if (value === undefined || value === null) {
+        return { values: [] };
+    }
+    const items = typeof value === 'string' ? [value] : Array.isArray(value) ? (value as unknown[]) : undefined;
+    if (!items || !items.every((item) => typeof item === 'string')) {
+        return { values: [], error: '"linkSkillsTo" must be a folder path or a list of folder paths.' };
+    }
+    return { values: [...new Set((items as string[]).map((item) => item.trim()).filter(Boolean))] };
+}
+
 export function validateConfig(raw: unknown): ConfigParseResult {
     if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
         return { draft: {}, error: 'config.json must contain a JSON object.' };
@@ -27,7 +39,14 @@ export function validateConfig(raw: unknown): ConfigParseResult {
         tag: asOptionalString(obj['tag']),
         directory: asOptionalString(obj['directory']),
     };
+    const links = parseLinkList(obj['linkSkillsTo']);
+    if (links.values.length > 0) {
+        draft.linkSkillsTo = links.values;
+    }
     const errors: string[] = [];
+    if (links.error) {
+        errors.push(links.error);
+    }
     for (const key of ['repository', 'branch', 'tag', 'directory'] as const) {
         if (obj[key] !== undefined && typeof obj[key] !== 'string') {
             errors.push(`"${key}" must be a string.`);
@@ -61,6 +80,7 @@ export function validateConfig(raw: unknown): ConfigParseResult {
             branch: draft.branch as string,
             tag: draft.tag,
             directory: draft.directory ?? repoNameFromUrl(repository),
+            linkSkillsTo: links.values,
         },
     };
 }
@@ -106,6 +126,7 @@ export async function writeConfig(folder: string, values: PoolConfigFile): Promi
         branch: values.branch.trim(),
         tag: values.tag?.trim() || undefined,
         directory: values.directory?.trim() || undefined,
+        linkSkillsTo: values.linkSkillsTo,
     };
     const result = validateConfig(clean);
     if (!result.config) {
@@ -128,6 +149,13 @@ export async function writeConfig(folder: string, values: PoolConfigFile): Promi
         } else {
             delete next[key];
         }
+    }
+    // A single folder is written as a plain string, the common case stays easy to read.
+    const links = result.config.linkSkillsTo;
+    if (links.length === 0) {
+        delete next['linkSkillsTo'];
+    } else {
+        next['linkSkillsTo'] = links.length === 1 ? links[0] : links;
     }
     await fs.mkdir(folder, { recursive: true });
     await fs.writeFile(file, `${JSON.stringify(next, null, 4)}\n`, 'utf8');

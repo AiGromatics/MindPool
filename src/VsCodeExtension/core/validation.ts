@@ -63,11 +63,13 @@ export function repoNameFromUrl(url: string): string {
 export interface ExpandContext {
     home: string;
     workspaceFolder?: string;
+    /** Folder that relative paths resolve against. Defaults to the workspace folder, then home. */
+    base?: string;
 }
 
 /**
  * Expands `~`, `${userHome}` and `${workspaceFolder}` in a configured folder path.
- * Relative paths resolve against the workspace folder (or the home folder).
+ * Relative paths resolve against `base`, the workspace folder or the home folder.
  */
 export function expandFolderPath(raw: string, ctx: ExpandContext): { path?: string; error?: string } {
     let value = raw.trim();
@@ -87,7 +89,7 @@ export function expandFolderPath(raw: string, ctx: ExpandContext): { path?: stri
         value = path.join(ctx.home, value.slice(2));
     }
     if (!path.isAbsolute(value)) {
-        value = path.resolve(ctx.workspaceFolder ?? ctx.home, value);
+        value = path.resolve(ctx.base ?? ctx.workspaceFolder ?? ctx.home, value);
     }
     return { path: path.normalize(value) };
 }
