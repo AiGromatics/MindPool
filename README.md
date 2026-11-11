@@ -215,8 +215,7 @@ script reads them to choose the next version:
 ```bash
 npm run bump:check   # is a release needed, and which version? (changes nothing)
 npm run bump         # update package.json, package-lock.json and CHANGELOG.md, commit and tag vX.Y.Z
-git push --follow-tags
-npm run package
+git push --follow-tags   # the vX.Y.Z tag starts the Publish workflow
 ```
 
 - A release is only made when something users get has changed. Docs and test commits on their
@@ -229,16 +228,30 @@ npm run package
 
 #### Publishing
 
-Publish every release to both registries. Cursor, Windsurf and VSCodium install extensions from
+Every release goes to both registries. Cursor, Windsurf and VSCodium install extensions from
 [Open VSX](https://open-vsx.org), not from the Visual Studio Marketplace.
 
-```bash
-npm run publish:marketplace   # token in VSCE_PAT, or `npx vsce login aigromatics` once
-npm run publish:ovsx          # token in OVSX_PAT
-```
+GitHub Actions does it: [`.github/workflows/publish.yml`](.github/workflows/publish.yml) runs
+when a `vX.Y.Z` tag is pushed. It checks that the tag matches `package.json`, runs the unit
+tests, packages the extension once (type check + build) and publishes that same `.vsix`:
 
-Both commands package the extension first, so they run the type check and the build. Images in
-this README are served from GitHub, so push before you publish.
+- **Visual Studio Marketplace** with
+  [Trusted Publishing](https://code.visualstudio.com/api/working-with-extensions/publishing-extension):
+  GitHub's OIDC token is exchanged for a 15-minute credential, so no token is stored anywhere. The
+  `AiGromaticsPipeline` policy of the `aigromatics` publisher trusts repository
+  `AiGromatics/MindPool`, workflow `publish.yml`, no environment. Renaming the workflow, or adding
+  an `environment:`, needs the same change in the policy.
+- **Open VSX** with the `OVSX_PAT` repository secret (*Settings → Secrets and variables →
+  Actions*). Without the secret this step is skipped.
+
+To publish without a new tag, for example after fixing a failed run, start the workflow by hand
+(*Actions → Publish → Run workflow*, or `gh workflow run publish.yml --ref main`). It publishes
+the version in `package.json` of that branch. A version that is already published is skipped, so
+re-running is safe. The `.vsix` of every run is kept as the `mindpool-vsix` artifact.
+
+From your own machine, `npm run publish:marketplace` (token in `VSCE_PAT`) and
+`npm run publish:ovsx` (token in `OVSX_PAT`) still work. Azure DevOps retires the global tokens
+the Marketplace needs on December 1, 2026, so prefer the workflow.
 
 The first Open VSX release needs an [open-vsx.org](https://open-vsx.org) account (signed in with
 GitHub), the signed Publisher Agreement, an access token, and the namespace:

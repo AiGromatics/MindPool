@@ -1,0 +1,77 @@
+# Publishes MindPool to the Visual Studio Marketplace with Trusted Publishing (OpenID Connect,
+# no stored token), and to Open VSX when the OVSX_PAT repository secret is set.
+#
+# The Marketplace policy "AiGromaticsPipeline" trusts exactly this file: repository
+# AiGromatics/MindPool, workflow publish.yml, no environment. Renaming this file or adding an
+# `environment:` to the job breaks that trust until the policy is updated to match.
+#
+# Runs when a release tag (vX.Y.Z, made by `npm run bump`) is pushed, or by hand from the
+# Actions tab, which publishes the version in package.json of the chosen branch.
+
+name: Publish
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Lets the job request the OIDC token that the Marketplace exchanges for a 15-minute credential.
+      id-token: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - name: Check that the tag matches package.json
+        if: github.ref_type == 'tag'
+        run: |
+          version="$(node -p 'require("./package.json").version')"
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match version $version in package.json."
+            exit 1
+          fi
+
+      - name: Unit tests
+        run: npm test
+
+      # Packaging runs vscode:prepublish (type check + build). Both registries get this same file.
+      - name: Package
+        run: npx vsce package --no-dependencies --out mindpool.vsix
+
+      # --skip-duplicate makes a re-run safe after a later step failed.
+      - name: Publish to the Visual Studio Marketplace
+        run: npx vsce publish --packagePath mindpool.vsix --oidc --skip-duplicate
+
+      - name: Publish to Open VSX
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: |
+          if [ -z "$OVSX_PAT" ]; then
+            echo "::notice::The OVSX_PAT secret is not set, so Open VSX was skipped."
+            exit 0
+          fi
+          npx ovsx publish mindpool.vsix --skip-duplicate
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mindpool-vsix
+          path: mindpool.vsix
+          if-no-files-found: error
