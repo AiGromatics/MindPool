@@ -6,11 +6,22 @@ All notable changes to MindPool are documented here. Versions follow
 
 ## [1.1.0](https://github.com/AiGromatics/MindPool/compare/v1.0.1...v1.1.0) (2026-11-11)
 
+> **Upgrading from 1.0:** MindPool no longer reads `config.json`. Fill in the dashboard form once
+> with the same values, or copy them into the settings. The clone already in the pool folder is
+> reused.
+
+### ✨ Features
+
+- **VS Code settings replace `config.json`.** The repository, branch, release tag, clone folder and skill links are now the settings `mindpool.repository`, `mindpool.branch`, `mindpool.tag`, `mindpool.directory` and `mindpool.linkSkillsTo`. Change them in the dashboard form or in the Settings editor (new **MindPool: Open Settings** command), and MindPool syncs again right away. A workspace can override them in its `.vscode/settings.json`. ([76aaee6](https://github.com/AiGromatics/MindPool/commit/76aaee6c992ecd5f36a039afdbc34c664c33bf80))
+- **Skill links.** Set `mindpool.linkSkillsTo`, for example to `~/.claude/skills`, and every installed skill gets a link there (a symlink, or a junction on Windows), so tools that only look one folder deep, like Claude Code, find them. A repository with several skills, like superpowers, gets one link per skill. Links are updated on every sync, and a folder or link that MindPool didn't create is never replaced; the **Skills** card reports it instead. ([2c552bb](https://github.com/AiGromatics/MindPool/commit/2c552bb64b6fd8d8c41a627114dbf1d962567ca7))
+
+### 🐛 Bug fixes
+
+- Choosing a pool folder had no effect when the workspace settings set `mindpool.poolFolder`. The new folder is now saved to the workspace settings in that case. ([6cbb5f3](https://github.com/AiGromatics/MindPool/commit/6cbb5f3685547113ecd5f145ba3434f417b7101e))
+
 ### 🔧 Other changes
 
-- replace config.json setting with extension settings ([76aaee6](https://github.com/AiGromatics/MindPool/commit/76aaee6c992ecd5f36a039afdbc34c664c33bf80))
-- improve documentation ([6cbb5f3](https://github.com/AiGromatics/MindPool/commit/6cbb5f3685547113ecd5f145ba3434f417b7101e))
-- adding external linkable skills ([2c552bb](https://github.com/AiGromatics/MindPool/commit/2c552bb64b6fd8d8c41a627114dbf1d962567ca7))
+- Clearer Marketplace listing: a new name and description, more keywords, links to the homepage and issue tracker, and a README with a dashboard screenshot and a demo. ([6cbb5f3](https://github.com/AiGromatics/MindPool/commit/6cbb5f3685547113ecd5f145ba3434f417b7101e))
 
 ## [1.0.1](https://github.com/AiGromatics/MindPool/compare/v1.0.0...v1.0.1) (2026-11-05)
 
