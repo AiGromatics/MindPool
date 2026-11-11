@@ -7,9 +7,9 @@ import { expandFolderPath, isInside, isSafeName } from './validation.ts';
 /**
  * Skill links. AI tools such as Claude Code only discover skills one level deep
  * (`~/.claude/skills/<name>/SKILL.md`), while MindPool keeps them in
- * `<team repository>/mindSkills/<skill>/`. When config.json sets `linkSkillsTo`, every skill
- * found in mindSkills gets a link in each of those folders: a symlink, or a junction on Windows
- * (junctions need no admin rights).
+ * `<team repository>/mindSkills/<skill>/`. When the `mindpool.linkSkillsTo` setting names
+ * folders, every skill found in mindSkills gets a link in each of those folders: a symlink, or a
+ * junction on Windows (junctions need no admin rights).
  *
  * Ownership is read from the file system: a symlink that points inside mindSkills belongs to
  * MindPool, so it is created, repointed and removed freely. Anything else with the same name (a
@@ -18,7 +18,7 @@ import { expandFolderPath, isInside, isSafeName } from './validation.ts';
 
 export const SKILL_FILE = 'SKILL.md';
 
-/** Inside mindSkills: the link folders of the last run, so they are cleaned up when config.json changes. */
+/** Inside mindSkills: the link folders of the last run, so they are cleaned up when the setting changes. */
 export const LINK_STATE_FILE = '.links.json';
 
 const LINK_TYPE = process.platform === 'win32' ? 'junction' : 'dir';
@@ -106,24 +106,24 @@ export async function findSkillFolders(skill: string, dir: string): Promise<Skil
 
 /**
  * Expands the `linkSkillsTo` folders: `~` and `${userHome}` are supported, relative paths start
- * at the pool folder (where config.json is). Folders inside the team repository are refused,
- * otherwise the links would show up as changes to commit.
+ * at the pool folder. Folders inside the team repository are refused, otherwise the links would
+ * show up as changes to commit.
  */
 export function resolveLinkTargets(values: readonly string[], options: { poolFolder: string; repoDir: string; home?: string }): { targets: string[]; problems: string[] } {
     const targets: string[] = [];
     const problems: string[] = [];
     for (const value of values) {
         if (value.includes('${workspaceFolder}')) {
-            problems.push(`"linkSkillsTo": "${value}" can't use \${workspaceFolder}, because every window shares config.json. Use an absolute path or ~.`);
+            problems.push(`"mindpool.linkSkillsTo": "${value}" can't use \${workspaceFolder}, because every window that uses this pool folder shares the same links. Use an absolute path or ~.`);
             continue;
         }
         const expanded = expandFolderPath(value, { home: options.home ?? os.homedir(), base: options.poolFolder });
         if (!expanded.path) {
-            problems.push(`"linkSkillsTo": ${expanded.error ?? `"${value}" is not a valid folder.`}`);
+            problems.push(`"mindpool.linkSkillsTo": ${expanded.error ?? `"${value}" is not a valid folder.`}`);
             continue;
         }
         if (isInside(options.repoDir, expanded.path)) {
-            problems.push(`"linkSkillsTo": "${value}" is inside the team repository, so the links would show up as changes. Pick a folder outside it, such as ~/.claude/skills.`);
+            problems.push(`"mindpool.linkSkillsTo": "${value}" is inside the team repository, so the links would show up as changes. Pick a folder outside it, such as ~/.claude/skills.`);
             continue;
         }
         if (!targets.some((t) => samePath(t, expanded.path as string))) {

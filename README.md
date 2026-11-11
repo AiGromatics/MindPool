@@ -22,15 +22,16 @@ Nothing is published to the web.
 - **Local edits are safe.** A skill you changed by hand is never overwritten. You decide when to
   reinstall it.
 
-Works with **Claude Code** out of the box: set [`linkSkillsTo`](#skill-links) to
+Works with **Claude Code** out of the box: set [`mindpool.linkSkillsTo`](#skill-links) to
 `~/.claude/skills` and every team skill shows up there. Any other tool that reads skill folders
 works the same way.
 
 ## How it works
 
-- Point MindPool at a **pool folder** that holds a `config.json`.
-- It clones your **team skills repository** next to that file and keeps it in sync, pulling new
-  commits automatically.
+- Point MindPool at a **pool folder** and your **team skills repository**. Both are ordinary
+  VS Code settings, and the dashboard fills them in for you.
+- It clones the repository into the pool folder and keeps it in sync, pulling new commits
+  automatically.
 - The repository's `skill.json` lists the skills, like `dependencies` in a `package.json`. Every
   skill is downloaded via git into **`mindSkills/`**, a folder that is never committed. Only the
   team settings get pushed.
@@ -47,53 +48,68 @@ works the same way.
 3. Click **Choose pool folder** (any folder, for example `~/MindPool`).
 4. Fill in the repository URL and branch, optionally a release tag, then **Save & clone**.
 
-That's it. MindPool writes `config.json`, clones the repository and installs the skills.
+That's it. MindPool saves your answers in the VS Code settings, clones the repository and
+installs the skills.
 
 ```
 ~/MindPool/                  ← pool folder (setting: mindpool.poolFolder)
-├── config.json              ← where the team repository lives
-└── team-skills/             ← the cloned team repository (Git)
+└── team-skills/             ← the cloned team repository (Git, setting: mindpool.repository)
     ├── skill.json           ← the skills the team shares (committed)
     └── mindSkills/          ← downloaded skills (git-excluded, never pushed)
         ├── code-review/
         └── pdf-tools/
 ```
 
-## `config.json`
+## Repository settings
+
+The dashboard form (⚙ on the **Repository** card) writes these settings for you. You can also
+change them in **Settings → Extensions → MindPool** (*MindPool: Open Settings*), or in
+`settings.json`:
 
 ```json
 {
-    "repository": "git@github.com:acme/team-skills.git",
-    "branch": "main",
-    "tag": "v1.4.0",
-    "directory": "team-skills",
-    "linkSkillsTo": "~/.claude/skills"
+    "mindpool.poolFolder": "~/MindPool",
+    "mindpool.repository": "git@github.com:acme/team-skills.git",
+    "mindpool.branch": "main",
+    "mindpool.tag": "v1.4.0",
+    "mindpool.directory": "team-skills",
+    "mindpool.linkSkillsTo": ["~/.claude/skills"]
 }
 ```
 
 
-| Key          | Required | Meaning                                                                                                         |
-| ------------ | -------- | --------------------------------------------------------------------------------------------------------------- |
-| `repository` | ✔       | Git URL of the team repository (https, ssh or a local path).                                                    |
-| `branch`     | ✔       | Branch to track. New commits are fast-forwarded automatically.                                                  |
-| `tag`        |          | Release tag to pin. The checkout becomes**read-only**, and newer releases are offered with a one-click upgrade. |
-| `directory`  |          | Folder name for the clone. Defaults to the repository name.                                                     |
-| `linkSkillsTo` |        | Folder, or list of folders, where every installed skill gets a link. See [Skill links](#skill-links).          |
+| Setting                 | Default | Meaning                                                                                                           |
+| ----------------------- | ------- | ----------------------------------------------------------------------------------------------------------------- |
+| `mindpool.poolFolder`   | `""`    | Folder where the team repository is cloned. Supports `~`, `${userHome}`, `${workspaceFolder}`.                    |
+| `mindpool.repository`   | `""`    | Git URL of the team repository (https, ssh or a local path). Required.                                            |
+| `mindpool.branch`       | `main`  | Branch to track. New commits are fast-forwarded automatically. Required, even with a tag.                         |
+| `mindpool.tag`          | `""`    | Release tag to pin. The checkout becomes **read-only**, and newer releases are offered with a one-click upgrade. |
+| `mindpool.directory`    | `""`    | Folder name for the clone, inside the pool folder. Defaults to the repository name.                               |
+| `mindpool.linkSkillsTo` | `[]`    | Folders where every installed skill gets a link. See [Skill links](#skill-links).                                 |
+
+A change takes effect right away: MindPool syncs again (or only refreshes, when
+`mindpool.autoSync` is off). User settings apply in every window. A workspace can override them in
+its `.vscode/settings.json`, for example to follow another release in one project, and the
+dashboard then saves your edits to the workspace settings.
+
+> **Upgrading from 1.0?** MindPool no longer reads `config.json`. Fill in the dashboard form
+> once with the same values (or copy them into the settings above). The clone already in the pool
+> folder is reused.
 
 ### Skill links
 
 Some AI tools only find skills one level deep. Claude Code, for example, reads
 `~/.claude/skills/<name>/SKILL.md`, so it never sees `team-skills/mindSkills/<name>/`. Set
-`linkSkillsTo` and MindPool keeps one link per skill in that folder: a symlink, or a junction on
-Windows.
+`mindpool.linkSkillsTo` and MindPool keeps one link per skill in that folder: a symlink, or a
+junction on Windows.
 
 - A skill with a `SKILL.md` at its root is linked under its `skill.json` name. A repository that
   holds several skills, in `skills/<name>/` (like superpowers) or in `<name>/`, gets one link
   per skill.
 - `~` and `${userHome}` work. A relative path starts at the pool folder, so `"."` links the
-  skills next to `config.json` when the pool folder is itself `~/.claude/skills`.
-- Links follow `skill.json`: they're added, repointed and removed on every sync, and removing
-  `linkSkillsTo` removes them.
+  skills into the pool folder itself, which is handy when the pool folder is `~/.claude/skills`.
+- Links follow `skill.json`: they're added, repointed and removed on every sync, and emptying
+  `mindpool.linkSkillsTo` removes them.
 - MindPool only touches links that point into `mindSkills/`. A real folder, or someone else's
   link, with the same name is left alone and reported in the **Skills** card.
 - Folders inside the team repository are refused, because the links would show up as changes.
@@ -149,19 +165,20 @@ The status bar shows the pool's health at a glance. Click it to open the dashboa
 ## Commands
 
 `MindPool: Sync Now` · `Select Pool Folder…` · `Pull` · `Commit Changes…` · `Push` ·
-`Open Repository in New Window` · `Open config.json` · `Open skill.json` · `Add Skill…` ·
+`Open Repository in New Window` · `Open Settings` · `Open skill.json` · `Add Skill…` ·
 `Update All Skills` · `Reveal mindSkills Folder`
 
 ## Settings
 
+The repository settings are described [above](#repository-settings). The others control syncing:
 
-| Setting                        | Default |                                                                              |
-| ------------------------------ | ------- | ---------------------------------------------------------------------------- |
-| `mindpool.poolFolder`          | `""`    | Folder with`config.json`. Supports `~`, `${userHome}`, `${workspaceFolder}`. |
-| `mindpool.autoSync`            | `true`  | Sync on startup, on a timer and when`config.json` or `skill.json` change.    |
-| `mindpool.syncIntervalMinutes` | `15`    | `0` disables the timer.                                                      |
-| `mindpool.autoUpdateSkills`    | `true`  | When off, updates are only reported.                                         |
-| `mindpool.gitPath`             | `git`   | Git executable.                                                              |
+
+| Setting                        | Default |                                                                                    |
+| ------------------------------ | ------- | ---------------------------------------------------------------------------------- |
+| `mindpool.autoSync`            | `true`  | Sync on startup, on a timer and when the MindPool settings or `skill.json` change. |
+| `mindpool.syncIntervalMinutes` | `15`    | `0` disables the timer.                                                            |
+| `mindpool.autoUpdateSkills`    | `true`  | When off, updates are only reported.                                               |
+| `mindpool.gitPath`             | `git`   | Git executable.                                                                    |
 
 MindPool uses your normal Git credentials (credential helper or SSH agent). It never prompts in
 the background. If authentication is needed, use **Open** and sign in through VS Code's Git.
@@ -244,7 +261,7 @@ src/
     │   ├── poolRepository.ts    clone / fetch / fast-forward / pull / commit / push / tags
     │   ├── skillManager.ts      resolve versions (ls-remote) and shallow installs into mindSkills
     │   ├── links.ts             linkSkillsTo: one link per skill (e.g. in ~/.claude/skills)
-    │   ├── config.ts            config.json
+    │   ├── config.ts            repository settings: validation and change detection
     │   ├── manifest.ts          skill.json
     │   ├── semver.ts            npm-style ranges
     │   ├── git.ts               git runner and output parsers

@@ -23,7 +23,7 @@ export function overallStatus(state: PoolState | undefined): OverallStatus {
         case 'noConfig':
             return { tone: 'idle', label: 'Setup', detail: 'Connect your team skills repository', emoji: '🔌' };
         case 'invalidConfig':
-            return { tone: 'error', label: 'Config error', detail: state.configError ?? 'config.json is invalid', emoji: '🧯' };
+            return { tone: 'error', label: 'Config error', detail: state.configError ?? 'The repository settings are invalid', emoji: '🧯' };
         case 'notCloned':
             return { tone: 'error', label: 'Not cloned', detail: state.lastError ?? 'The repository has not been downloaded yet', emoji: '📦' };
         case 'ready':

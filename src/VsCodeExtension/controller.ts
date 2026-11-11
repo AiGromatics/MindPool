@@ -2,12 +2,15 @@ import { promises as fs } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { CONFIG_FILE } from './core/config.ts';
+import { sameSettings, SETTING_KEYS } from './core/config.ts';
 import { MindPoolEngine } from './core/engine.ts';
 import { createGit, type GitExec } from './core/git.ts';
 import { inspectRemote } from './core/skillManager.ts';
-import type { HostCommand, HostToWebview, LogEntry, PoolState, SkillRefKind, SkillSpec, TrackedOperation, WebviewToHost } from './core/types.ts';
+import type { HostCommand, HostToWebview, LogEntry, PoolSettings, PoolState, SkillRefKind, SkillSpec, TrackedOperation, WebviewToHost } from './core/types.ts';
 import { expandFolderPath, isInside, isSafeName, repoNameFromUrl, settingTarget, validateGitUrl } from './core/validation.ts';
+
+/** Shows only MindPool's settings in the Settings editor. */
+const SETTINGS_QUERY = '@ext:aigromatics.mindpool';
 
 interface Settings {
     poolFolder: string;
@@ -15,6 +18,8 @@ interface Settings {
     intervalMinutes: number;
     autoUpdateSkills: boolean;
     gitPath: string;
+    /** `mindpool.repository`, `mindpool.branch`, … */
+    repository: Partial<PoolSettings>;
 }
 
 /** Public API returned by `activate()`, handy for tests and other extensions. */
@@ -51,6 +56,8 @@ export class MindPoolController implements vscode.Disposable {
     private timer?: ReturnType<typeof setInterval>;
     private readonly debouncers = new Map<string, ReturnType<typeof setTimeout>>();
     private settingsCache: Settings;
+    /** Set while the dashboard writes the repository settings, one key at a time. */
+    private writingSettings = false;
 
     constructor(output: vscode.LogOutputChannel) {
         this.output = output;
@@ -100,7 +107,39 @@ export class MindPoolController implements vscode.Disposable {
             intervalMinutes: Math.max(0, c.get<number>('syncIntervalMinutes', 15)),
             autoUpdateSkills: c.get<boolean>('autoUpdateSkills', true),
             gitPath: c.get<string>('gitPath', 'git'),
+            repository: {
+                repository: c.get<string>('repository', ''),
+                branch: c.get<string>('branch', 'main'),
+                tag: c.get<string>('tag', ''),
+                directory: c.get<string>('directory', ''),
+                linkSkillsTo: c.get<string[]>('linkSkillsTo', []),
+            },
         };
+    }
+
+    /**
+     * Saves the repository settings from the dashboard where VS Code reads them back: in the
+     * workspace settings when they already override a value, in the user settings otherwise.
+     * Keys are written one by one; the change events fired in between are not turned into syncs,
+     * because the engine syncs once with the final values right after.
+     */
+    private async writeRepositorySettings(values: PoolSettings): Promise<void> {
+        const c = vscode.workspace.getConfiguration('mindpool');
+        this.writingSettings = true;
+        try {
+            for (const key of SETTING_KEYS) {
+                const value = values[key];
+                const empty = value === undefined || value === '' || (Array.isArray(value) && value.length === 0);
+                const inWorkspace = settingTarget(c.inspect(key)) === 'workspace';
+                // Removing a workspace value would bring the user value back, so clear it instead.
+                const stored = !empty ? value : inWorkspace ? (key === 'linkSkillsTo' ? [] : '') : undefined;
+                await c.update(key, stored, inWorkspace ? vscode.ConfigurationTarget.Workspace : vscode.ConfigurationTarget.Global);
+            }
+        } finally {
+            this.writingSettings = false;
+            // Change events that arrive late now compare equal and are ignored.
+            this.settingsCache = this.readSettings();
+        }
     }
 
     private createGit(gitPath: string): GitExec {
@@ -108,6 +147,7 @@ export class MindPoolController implements vscode.Disposable {
     }
 
     private reload(): void {
+        const previous = this.settingsCache;
         const settings = this.readSettings();
         this.settingsCache = settings;
         const folder = expandFolderPath(settings.poolFolder, {
@@ -131,6 +171,10 @@ export class MindPoolController implements vscode.Disposable {
                 poolFolder: resolved,
                 git: this.git,
                 autoUpdateSkills: settings.autoUpdateSkills,
+                settings: {
+                    read: () => this.readSettings().repository,
+                    write: (values) => this.writeRepositorySettings(values),
+                },
                 onLog: (entry) => this.writeLog(entry),
             });
             this.engine = engine;
@@ -143,6 +187,10 @@ export class MindPoolController implements vscode.Disposable {
             void (settings.autoSync ? engine.sync() : engine.refreshLocal());
         } else {
             this.engine.setAutoUpdateSkills(settings.autoUpdateSkills);
+            if (!this.writingSettings && !sameSettings(previous.repository, settings.repository)) {
+                this.output.info('Repository settings changed');
+                void (settings.autoSync ? this.engine.sync() : this.engine.refreshLocal());
+            }
         }
         this.resetTimer(settings);
     }
@@ -207,8 +255,8 @@ export class MindPoolController implements vscode.Disposable {
         );
     }
 
-    /** config.json / skill.json edits trigger a sync; other edits refresh the changes list. */
-    private onFileEvent(kind: 'config' | 'manifest' | 'local'): void {
+    /** skill.json edits trigger a sync; other edits refresh the changes list. */
+    private onFileEvent(kind: 'manifest' | 'local'): void {
         const engine = this.engine;
         if (!engine) {
             return;
@@ -218,7 +266,7 @@ export class MindPoolController implements vscode.Disposable {
             return;
         }
         this.debounce(kind, 800, async () => {
-            if (this.engine !== engine || !(await engine.hasFileChanged(kind))) {
+            if (this.engine !== engine || !(await engine.hasManifestChanged())) {
                 return;
             }
             void (this.settingsCache.autoSync ? engine.sync() : engine.refreshLocal());
@@ -226,18 +274,13 @@ export class MindPoolController implements vscode.Disposable {
     }
 
     private updateWatchers(state: PoolState): void {
-        const pool = state.poolFolder;
         const repoPath = state.repo?.cloned ? state.repo.path : undefined;
-        const key = `${pool ?? ''}|${repoPath ?? ''}`;
-        if (!pool || key === this.watchedKey) {
+        const key = repoPath ?? '';
+        if (key === this.watchedKey) {
             return;
         }
         this.disposeWatchers();
         this.watchedKey = key;
-
-        const configWatcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(pool), CONFIG_FILE));
-        const onConfig = (): void => this.onFileEvent('config');
-        this.watchers.push(configWatcher, configWatcher.onDidChange(onConfig), configWatcher.onDidCreate(onConfig), configWatcher.onDidDelete(onConfig));
 
         if (repoPath) {
             const repoWatcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(vscode.Uri.file(repoPath), '**/*'));
@@ -318,7 +361,7 @@ export class MindPoolController implements vscode.Disposable {
             canSelectFiles: false,
             canSelectMany: false,
             openLabel: 'Use as MindPool folder',
-            title: 'Choose the folder that holds (or will hold) config.json',
+            title: 'Choose the folder where MindPool clones your team repository',
             defaultUri: current ? vscode.Uri.file(current) : vscode.Uri.file(os.homedir()),
         });
         const folder = picked?.[0];
@@ -345,19 +388,8 @@ export class MindPoolController implements vscode.Disposable {
         await vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.file(target), { forceNewWindow: true });
     }
 
-    async openConfig(): Promise<void> {
-        const engine = this.requireEngine();
-        if (!engine) {
-            return;
-        }
-        const file = path.join(engine.poolFolder, CONFIG_FILE);
-        try {
-            await fs.access(file);
-        } catch {
-            await fs.mkdir(engine.poolFolder, { recursive: true });
-            await fs.writeFile(file, `${JSON.stringify({ repository: '', branch: 'main' }, null, 4)}\n`, 'utf8');
-        }
-        await vscode.window.showTextDocument(vscode.Uri.file(file));
+    async openSettings(): Promise<void> {
+        await vscode.commands.executeCommand('workbench.action.openSettings', SETTINGS_QUERY);
     }
 
     async openManifest(): Promise<void> {
@@ -498,9 +530,6 @@ export class MindPoolController implements vscode.Disposable {
             case 'openInNewWindow':
                 await this.openInNewWindow();
                 return;
-            case 'openConfig':
-                await this.openConfig();
-                return;
             case 'openManifest':
                 await this.openManifest();
                 return;
@@ -508,7 +537,7 @@ export class MindPoolController implements vscode.Disposable {
                 await this.revealSkillsFolder();
                 return;
             case 'openSettings':
-                await vscode.commands.executeCommand('workbench.action.openSettings', 'mindpool');
+                await this.openSettings();
                 return;
             case 'showLog':
                 this.output.show(true);
@@ -626,7 +655,7 @@ export class MindPoolController implements vscode.Disposable {
             register('mindpool.push', () => this.runHostCommand('push')),
             register('mindpool.commit', () => this.commitInteractive()),
             register('mindpool.openInNewWindow', () => this.openInNewWindow()),
-            register('mindpool.openConfig', () => this.openConfig()),
+            register('mindpool.openSettings', () => this.openSettings()),
             register('mindpool.openManifest', () => this.openManifest()),
             register('mindpool.addSkill', () => this.addSkillInteractive()),
             register('mindpool.updateSkills', () => this.runHostCommand('updateSkills')),

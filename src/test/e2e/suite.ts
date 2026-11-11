@@ -30,6 +30,7 @@ async function waitFor(api: MindPoolApi, predicate: (state: PoolState) => boolea
 
 export async function run(): Promise<void> {
     const pool = env('MINDPOOL_E2E_POOL');
+    const teamUrl = env('MINDPOOL_E2E_TEAM_URL');
     const teamWork = env('MINDPOOL_E2E_TEAM_WORK');
     const skillTwo = env('MINDPOOL_E2E_SKILL_TWO');
     const repoDir = path.join(pool, 'team-skills');
@@ -49,7 +50,7 @@ export async function run(): Promise<void> {
 
     it('registers every command', async () => {
         const commands = await vscode.commands.getCommands(true);
-        for (const id of ['sync', 'selectFolder', 'pull', 'commit', 'push', 'openInNewWindow', 'openConfig', 'openManifest', 'addSkill', 'updateSkills', 'revealSkillsFolder']) {
+        for (const id of ['sync', 'selectFolder', 'pull', 'commit', 'push', 'openInNewWindow', 'openSettings', 'openManifest', 'addSkill', 'updateSkills', 'revealSkillsFolder']) {
             assert.ok(commands.includes(`mindpool.${id}`), `mindpool.${id} is registered`);
         }
     });
@@ -63,9 +64,11 @@ export async function run(): Promise<void> {
         await vscode.commands.executeCommand('mindpool.dashboard.focus');
     });
 
-    it('clones the team repository and installs skills into mindSkills', async () => {
+    it('clones the repository from the settings and installs skills into mindSkills', async () => {
         assert.ok(api);
-        await vscode.workspace.getConfiguration('mindpool').update('poolFolder', pool, vscode.ConfigurationTarget.Global);
+        const settings = vscode.workspace.getConfiguration('mindpool');
+        await settings.update('repository', teamUrl, vscode.ConfigurationTarget.Global);
+        await settings.update('poolFolder', pool, vscode.ConfigurationTarget.Global);
         await vscode.commands.executeCommand('mindpool.sync');
         const state = await waitFor(api, (s) => s.phase === 'ready' && s.skills.length === 1 && s.skills.every((k) => k.health === 'ok'), 'the first sync');
         assert.equal(state.lastError, undefined);
@@ -90,9 +93,9 @@ export async function run(): Promise<void> {
         assert.ok(existsSync(path.join(repoDir, 'mindSkills', 'test-writer', 'SKILL.md')));
     });
 
-    it('opens config.json in an editor', async () => {
-        await vscode.commands.executeCommand('mindpool.openConfig');
-        assert.equal(vscode.window.activeTextEditor?.document.uri.fsPath, path.join(pool, 'config.json'));
+    it('opens the MindPool settings', async () => {
+        await vscode.commands.executeCommand('mindpool.openSettings');
+        assert.equal(vscode.window.tabGroups.activeTabGroup.activeTab?.label, 'Settings');
         await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
     });
 
@@ -100,6 +103,15 @@ export async function run(): Promise<void> {
         await vscode.commands.executeCommand('mindpool.openManifest');
         assert.equal(vscode.window.activeTextEditor?.document.uri.fsPath, path.join(repoDir, 'skill.json'));
         await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+    });
+
+    it('follows a change of the repository settings', async () => {
+        assert.ok(api);
+        await vscode.workspace.getConfiguration('mindpool').update('directory', 'moved', vscode.ConfigurationTarget.Global);
+        const moved = path.join(pool, 'moved');
+        const state = await waitFor(api, (s) => s.repo?.path === moved && s.phase === 'ready' && s.skills.length === 2 && s.skills.every((k) => k.health === 'ok'), 'the new clone folder');
+        assert.equal(state.config?.directory, 'moved');
+        assert.ok(existsSync(path.join(moved, 'mindSkills', 'test-writer', 'SKILL.md')));
     });
 
     let failures = 0;

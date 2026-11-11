@@ -1,12 +1,6 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import * as path from 'node:path';
-import { after, describe, test } from 'node:test';
-import { parseConfig, readConfig, validateConfig, writeConfig } from '../../VsCodeExtension/core/config.ts';
-import { Sandbox } from '../helpers.ts';
-
-const sandbox = new Sandbox();
-after(() => sandbox.cleanup());
+import { describe, test } from 'node:test';
+import { cleanSettings, isBlank, sameSettings, validateConfig } from '../../VsCodeExtension/core/config.ts';
 
 describe('validateConfig', () => {
     test('accepts a minimal config and derives the clone folder', () => {
@@ -15,14 +9,19 @@ describe('validateConfig', () => {
         assert.equal(result.error, undefined);
     });
 
-    test('linkSkillsTo takes one folder or a list, trimmed and without duplicates', () => {
+    test('treats empty settings like unset ones', () => {
+        const result = validateConfig({ repository: 'https://x/y.git', branch: 'main', tag: '', directory: '  ', linkSkillsTo: [] });
+        assert.deepEqual(result.config, { repository: 'https://x/y.git', branch: 'main', tag: undefined, directory: 'y', linkSkillsTo: [] });
+    });
+
+    test('linkSkillsTo takes a list (or one folder), trimmed and without duplicates', () => {
         const base = { repository: 'https://x/y.git', branch: 'main' };
-        assert.deepEqual(validateConfig({ ...base, linkSkillsTo: ' ~/.claude/skills ' }).config?.linkSkillsTo, ['~/.claude/skills']);
         assert.deepEqual(validateConfig({ ...base, linkSkillsTo: ['~/.claude/skills', '', '~/.claude/skills', '/opt/skills'] }).config?.linkSkillsTo, ['~/.claude/skills', '/opt/skills']);
+        assert.deepEqual(validateConfig({ ...base, linkSkillsTo: ' ~/.claude/skills ' }).config?.linkSkillsTo, ['~/.claude/skills']);
         assert.deepEqual(validateConfig({ ...base, linkSkillsTo: '' }).config?.linkSkillsTo, []);
         const wrong = validateConfig({ ...base, linkSkillsTo: [1] });
         assert.equal(wrong.config, undefined);
-        assert.match(wrong.error ?? '', /"linkSkillsTo" must be a folder path or a list/);
+        assert.match(wrong.error ?? '', /"mindpool.linkSkillsTo" must be a list of folder paths/);
         assert.match(validateConfig({ ...base, linkSkillsTo: { a: 1 } }).error ?? '', /linkSkillsTo/);
     });
 
@@ -43,56 +42,54 @@ describe('validateConfig', () => {
         const result = validateConfig({ repository: '--upload-pack=x', branch: 'main', directory: '../outside' });
         assert.equal(result.config, undefined);
         assert.match(result.error ?? '', /must not start/);
-        assert.match(result.error ?? '', /plain folder name/);
+        assert.match(result.error ?? '', /"mindpool.directory" must be a plain folder name/);
         assert.equal(result.draft.branch, 'main');
     });
 
-    test('rejects mindSkills as clone folder and wrong types', () => {
+    test('rejects mindSkills as clone folder and wrong types from a hand-edited settings.json', () => {
         assert.match(validateConfig({ repository: 'https://x/y.git', branch: 'main', directory: 'mindSkills' }).error ?? '', /plain folder name/);
-        assert.match(validateConfig({ repository: 'https://x/y.git', branch: 3 }).error ?? '', /"branch" must be a string/);
-        assert.match(validateConfig([]).error ?? '', /JSON object/);
+        assert.match(validateConfig({ repository: 'https://x/y.git', branch: 3 }).error ?? '', /"mindpool.branch" must be a string/);
+        assert.match(validateConfig([]).error ?? '', /must be an object/);
     });
 });
 
-describe('parseConfig', () => {
-    test('reports invalid JSON', () => {
-        assert.match(parseConfig('{ nope').error ?? '', /not valid JSON/);
+describe('cleanSettings', () => {
+    test('trims values, leaves out empty optional ones and keeps the folder name as typed', () => {
+        assert.deepEqual(cleanSettings({ repository: ' https://example.com/acme/skills.git ', branch: ' main ', tag: '', directory: '', linkSkillsTo: [' ~/.claude/skills ', '~/.claude/skills'] }), {
+            repository: 'https://example.com/acme/skills.git',
+            branch: 'main',
+            tag: undefined,
+            directory: undefined,
+            linkSkillsTo: ['~/.claude/skills'],
+        });
+        assert.equal(cleanSettings({ repository: 'https://x/y.git', branch: 'main', directory: 'pool' }).directory, 'pool');
+    });
+
+    test('refuses invalid values', () => {
+        assert.throws(() => cleanSettings({ repository: '', branch: 'main' }), /Repository URL is required/);
+        assert.throws(() => cleanSettings({ repository: 'https://x/y.git', branch: 'main', tag: 'bad tag' }), /not a valid git ref/);
     });
 });
 
-describe('readConfig / writeConfig', () => {
-    test('a missing file is reported as not existing', async () => {
-        const result = await readConfig(sandbox.path('empty'));
-        assert.equal(result.exists, false);
+describe('sameSettings', () => {
+    const base = { repository: 'https://x/y.git', branch: 'main' };
+
+    test('ignores whitespace, empty versus unset values and duplicate folders', () => {
+        assert.equal(sameSettings({ ...base, tag: '', directory: '', linkSkillsTo: [] }, { ...base }), true);
+        assert.equal(sameSettings({ ...base, repository: ' https://x/y.git ' }, base), true);
+        assert.equal(sameSettings({ ...base, linkSkillsTo: ['~/a', '~/a'] }, { ...base, linkSkillsTo: ['~/a'] }), true);
     });
 
-    test('writes, reads back and preserves unknown keys', async () => {
-        const folder = sandbox.path('pool');
-        sandbox.write('pool/config.json', JSON.stringify({ team: 'acme', repository: 'old', branch: 'x', tag: 'v0' }));
-        const config = await writeConfig(folder, { repository: ' https://example.com/acme/skills.git ', branch: 'main', tag: '' });
-        assert.equal(config.directory, 'skills');
-        const raw = JSON.parse(readFileSync(sandbox.path('pool/config.json'), 'utf8'));
-        assert.deepEqual(raw, { team: 'acme', repository: 'https://example.com/acme/skills.git', branch: 'main' });
-        const read = await readConfig(folder);
-        assert.equal(read.exists, true);
-        assert.equal(read.config?.repository, 'https://example.com/acme/skills.git');
-        assert.equal(typeof read.text, 'string');
+    test('sees real changes, including a fix of an invalid value', () => {
+        assert.equal(sameSettings({ ...base, tag: 'v1.0.0' }, base), false);
+        assert.equal(sameSettings({ ...base, branch: 'develop' }, base), false);
+        assert.equal(sameSettings({ ...base, linkSkillsTo: ['~/a'] }, { ...base, linkSkillsTo: ['~/b'] }), false);
+        assert.equal(sameSettings({ ...base, linkSkillsTo: [1] as unknown as string[] }, { ...base, linkSkillsTo: [] }), false);
     });
+});
 
-    test('writes linkSkillsTo as a string for one folder, a list for more, and drops it when empty', async () => {
-        const folder = sandbox.path('pool-links');
-        const values = { repository: 'https://example.com/acme/skills.git', branch: 'main' };
-        const raw = (): Record<string, unknown> => JSON.parse(readFileSync(path.join(folder, 'config.json'), 'utf8'));
-        const one = await writeConfig(folder, { ...values, linkSkillsTo: ['~/.claude/skills'] });
-        assert.deepEqual(one.linkSkillsTo, ['~/.claude/skills']);
-        assert.equal(raw()['linkSkillsTo'], '~/.claude/skills');
-        await writeConfig(folder, { ...values, linkSkillsTo: ['~/.claude/skills', '~/.codex/skills'] });
-        assert.deepEqual(raw()['linkSkillsTo'], ['~/.claude/skills', '~/.codex/skills']);
-        await writeConfig(folder, { ...values, linkSkillsTo: [] });
-        assert.equal('linkSkillsTo' in raw(), false);
-    });
-
-    test('refuses to write an invalid config', async () => {
-        await assert.rejects(writeConfig(sandbox.path('pool2'), { repository: '', branch: 'main' }), /Repository URL is required/);
+describe('isBlank', () => {
+    test('only unset and whitespace-only values are blank', () => {
+        assert.deepEqual([undefined, null, '', '  ', 'x', 0].map(isBlank), [true, true, true, true, false, false]);
     });
 });

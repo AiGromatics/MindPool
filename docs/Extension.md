@@ -6,9 +6,9 @@ and every member's MindPool downloads them and keeps them up to date.
 
 **In short:**
 
-- The user picks a **pool folder** that contains a `config.json`.
-- `config.json` points to the **team repository**. It must be a Git repository, and it names a
-  **branch** and, optionally, a **release tag**.
+- The user picks a **pool folder** and a **team repository**, both stored in the VS Code
+  settings. The repository must be a Git repository; the settings also name a **branch** and,
+  optionally, a **release tag**.
 - MindPool **clones** the team repository into the pool folder if it isn't there yet. If it is
   there, MindPool looks for **new commits** and updates the local copy automatically.
 - From the dashboard you can **pull**, **commit** and **push**. For anything more complex, a button
@@ -28,8 +28,8 @@ For step-by-step instructions, see the [User Guide](UserGuide.md).
 
 | Term | Meaning |
 |---|---|
-| **Pool folder** | A folder on the user's machine that holds `config.json`. Set with the `mindpool.poolFolder` setting. |
-| **`config.json`** | Says which team repository to use, and which branch or release tag. |
+| **Pool folder** | A folder on the user's machine where the team repository is cloned. Set with the `mindpool.poolFolder` setting. |
+| **Repository settings** | `mindpool.repository`, `mindpool.branch`, `mindpool.tag`, …: which team repository to use, and which branch or release tag. |
 | **Team repository** | A Git repository, cloned into the pool folder. It contains `skill.json` and any other settings the team shares. |
 | **`skill.json`** | The list of skills and the Git source of each one. |
 | **Skill** | A Git repository of its own, downloaded into `mindSkills/<name>/`. |
@@ -37,8 +37,7 @@ For step-by-step instructions, see the [User Guide](UserGuide.md).
 
 ```
 ~/MindPool/                        ← pool folder (mindpool.poolFolder)
-├── config.json                    ← which repository, branch and tag
-└── Skills/                        ← team repository (cloned by MindPool)
+└── Skills/                        ← team repository (mindpool.repository, cloned by MindPool)
     ├── skill.json                 ← shared list of skills (committed)
     ├── …                          ← any other team settings (committed)
     └── mindSkills/                ← downloaded skills (never committed)
@@ -46,40 +45,50 @@ For step-by-step instructions, see the [User Guide](UserGuide.md).
         └── code-review/
 ```
 
-## 2. The pool folder and `config.json`
+## 2. The pool folder and the repository settings
 
-The pool folder comes from the `mindpool.poolFolder` setting. The path may use `~`, `${userHome}`
-and `${workspaceFolder}`. Each machine can set its own pool folder.
+Everything MindPool needs to know lives in the VS Code settings, under `mindpool.*`. The
+dashboard form writes them, and the user can also edit them in the Settings editor (*MindPool:
+Open Settings*) or in `settings.json`:
 
 ```json
 {
-    "repository": "https://github.com/AiGromatics/Skills.git",
-    "branch": "main",
-    "tag": "v1.0.0",
-    "directory": "Skills",
-    "linkSkillsTo": "~/.claude/skills"
+    "mindpool.poolFolder": "~/MindPool",
+    "mindpool.repository": "https://github.com/AiGromatics/Skills.git",
+    "mindpool.branch": "main",
+    "mindpool.tag": "v1.0.0",
+    "mindpool.directory": "Skills",
+    "mindpool.linkSkillsTo": ["~/.claude/skills"]
 }
 ```
 
-| Key          | Required | Rule |
-|--------------|----------|------|
-| `repository` | yes      | Git URL: https, ssh or a local path. |
-| `branch`     | yes      | The branch to track. It is always required, even with a tag: the clone starts from it. |
-| `tag`        | no       | A release tag to pin. The checkout becomes **read-only** (see [§3.2](#32-release-mode-tag)). |
-| `directory`  | no       | The folder name for the clone. It defaults to the repository name, and it can't be `mindSkills`. |
-| `linkSkillsTo` | no     | A folder, or a list of folders, that gets one link per installed skill (see [§6.1](#61-skill-links)). `~` and `${userHome}` work, and a relative path starts at the pool folder. |
+| Setting | Required | Rule |
+|---|---|---|
+| `mindpool.poolFolder` | yes | Where the clone lives. The path may use `~`, `${userHome}` and `${workspaceFolder}`. Machine-specific: each machine sets its own. |
+| `mindpool.repository` | yes | Git URL: https, ssh or a local path. |
+| `mindpool.branch` | yes | The branch to track (default `main`). It is always required, even with a tag: the clone starts from it. |
+| `mindpool.tag` | no | A release tag to pin. The checkout becomes **read-only** (see [§3.2](#32-release-mode-tag)). |
+| `mindpool.directory` | no | The folder name for the clone, inside the pool folder. It defaults to the repository name, and it can't be `mindSkills`. |
+| `mindpool.linkSkillsTo` | no | A list of folders that get one link per installed skill (see [§6.1](#61-skill-links)). `~` and `${userHome}` work, and a relative path starts at the pool folder. Machine-specific, like the pool folder. |
 
-The dashboard shows a different screen depending on the state of the pool folder:
+User settings apply in every window, and a workspace can override any of them in its
+`.vscode/settings.json`. When the dashboard saves, each value goes where VS Code will read it
+back: to the workspace settings if the workspace already overrides that key (an emptied value is
+stored as `""` there, so the user value doesn't come back), to the user settings otherwise.
+
+The settings are read again on every sync, so an edit made anywhere takes effect right away.
+Values written by hand are validated like the form's: a wrong type or an unsafe value puts the
+pool in the *invalid* state below and is never used.
+
+The dashboard shows a different screen depending on the state of the settings:
 
 | State | What the dashboard shows |
 |---|---|
 | No pool folder set | A welcome screen with **Choose pool folder**. |
-| No `config.json` | A form that writes `config.json` (**Save & clone**). |
-| `config.json` is invalid | The same form, pre-filled with the current values and showing the error. |
+| No repository set | A form that saves the repository settings (**Save & clone**). |
+| Repository settings are invalid | The same form, pre-filled with the current values and showing the error. |
 | Repository not cloned yet | A clone is attempted on the next sync. |
 | Ready | The full dashboard. |
-
-Unknown keys in `config.json` are kept when MindPool rewrites the file.
 
 ## 3. Keeping the team repository up to date
 
@@ -89,7 +98,8 @@ Unknown keys in `config.json` are kept when MindPool rewrites the file.
 |---|---|
 | VS Code starts | Full sync. |
 | Every `mindpool.syncIntervalMinutes` (default 15, `0` turns it off) | Full sync. |
-| `config.json` or `skill.json` changes on disk | Full sync. |
+| A repository setting changes (from the dashboard, the Settings editor or `settings.json`) | Full sync. |
+| `skill.json` changes on disk | Full sync. |
 | **Sync** button or the *MindPool: Sync Now* command | Full sync. |
 | The VS Code window regains focus, or the dashboard is shown | Local refresh only, with no network access. |
 
@@ -101,9 +111,9 @@ run are merged into it.
 
 1. **Clone** the repository if it isn't there yet (`git clone --branch <branch>`). MindPool refuses
    to clone into a folder that exists and isn't empty.
-2. Otherwise, **fetch** from the remote. If the URL in `config.json` changed, `origin` is updated
+2. Otherwise, **fetch** from the remote. If `mindpool.repository` changed, `origin` is updated
    first.
-3. **Align** the checkout with `config.json`: branch mode or release mode, described below.
+3. **Align** the checkout with the settings: branch mode or release mode, described below.
 4. Make sure **`mindSkills/` is excluded** from Git (see [§6](#6-why-mindskills-is-never-committed)).
 5. **Sync the skills** (see [§5](#5-skilljson-and-the-skills)).
 
@@ -127,8 +137,8 @@ MindPool never merges, rebases or discards work without the user asking.
 
 - The checkout is placed on the tag (detached HEAD) and is **read-only**: commit and push are
   turned off.
-- When the remote has newer release tags, the dashboard offers **Use vX.Y.Z**, which updates `tag`
-  in `config.json`.
+- When the remote has newer release tags, the dashboard offers **Use vX.Y.Z**, which updates the
+  `mindpool.tag` setting.
 - The tag pins the **team repository**, and therefore the content of `skill.json`. Skills listed
   with a branch or a version range still move. To freeze everything, pin the skills with `tag` as
   well.
@@ -221,7 +231,8 @@ As a result, **Changes**, **Commit** and **Push** only ever see the team's setti
 
 Keeping skills inside the team repository has a downside: tools that only scan one level deep
 can't find them. Claude Code reads `~/.claude/skills/<name>/SKILL.md` (and accepts a symlink as
-`<name>`). It doesn't see `<pool>/<repo>/mindSkills/<name>/`. `linkSkillsTo` bridges the gap.
+`<name>`). It doesn't see `<pool>/<repo>/mindSkills/<name>/`. `mindpool.linkSkillsTo` bridges
+the gap.
 
 At the end of every skills pass (sync, install, remove, offline refresh), and only when
 `skill.json` is valid, MindPool reconciles each configured folder:
@@ -246,7 +257,8 @@ Safety rules:
 - **Nothing MindPool didn't create is touched.** A real folder, a file, or a symlink to somewhere
   else with the same name is reported in the **Skills** card. It is never replaced.
 - **Folders inside the team repository are refused.** The links would show up as changes to
-  commit. `${workspaceFolder}` is refused too, because every window shares `config.json`.
+  commit. `${workspaceFolder}` is refused too: every window that uses the same pool folder shares
+  the same links, so each window would remove the links of the others.
 - Problems are logged once, when they first appear, and stay visible in the **Skills** card
   until they're fixed.
 
@@ -269,7 +281,7 @@ Safety rules:
   - Commit Changes…
   - Push
   - Open Repository in New Window
-  - Open config.json
+  - Open Settings
   - Open skill.json
   - Add Skill…
   - Update All Skills
@@ -282,8 +294,9 @@ Safety rules:
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `mindpool.poolFolder` | `""` | The folder that contains `config.json`. |
-| `mindpool.autoSync` | `true` | Sync on startup, on a timer, and when `config.json` or `skill.json` change. |
+| `mindpool.poolFolder` | `""` | The folder where the team repository is cloned. |
+| `mindpool.repository`, `branch`, `tag`, `directory`, `linkSkillsTo` | | The repository settings, see [§2](#2-the-pool-folder-and-the-repository-settings). |
+| `mindpool.autoSync` | `true` | Sync on startup, on a timer, and when the MindPool settings or `skill.json` change. |
 | `mindpool.syncIntervalMinutes` | `15` | Minutes between automatic syncs. `0` turns the timer off. |
 | `mindpool.autoUpdateSkills` | `true` | Install newer skill versions automatically. When off, they are only reported. |
 | `mindpool.gitPath` | `git` | The Git executable to use. |
@@ -294,13 +307,14 @@ Safety rules:
   has (credential helper or SSH agent). If authentication is needed, the user signs in through
   **Open in New Window** and VS Code's Git.
 - **Time limits.** Network operations time out after 3 minutes.
-- **Contents of `config.json` and `skill.json` are treated as untrusted input:**
+- **The settings and the contents of `skill.json` are treated as untrusted input** (settings can
+  come from a workspace's `.vscode/settings.json`):
   - URLs and refs can't start with `-`.
   - The `ext::` and `fd::` Git transports are refused.
   - Skill and folder names are restricted to safe characters.
-  - Every path is checked to stay inside the pool folder. The only exception is `linkSkillsTo`,
-    which is read from the local `config.json` only, never from `skill.json`, so teammates can't
-    choose where links go. Link names come from validated skill names and skill folder names,
+  - Every path is checked to stay inside the pool folder. The only exception is
+    `mindpool.linkSkillsTo`, which is read from the VS Code settings only, never from
+    `skill.json`, so teammates can't choose where links go. Link names come from validated skill names and skill folder names,
     so a link can't escape its folder. Links only ever replace or remove MindPool's own links.
 - **The dashboard webview** runs under a strict Content Security Policy (scripts only with a
   nonce), escapes everything it displays, and validates every message it sends to the extension.

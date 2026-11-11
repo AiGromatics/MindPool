@@ -20,7 +20,7 @@ export type FastForwardResult =
     | { kind: 'diverged'; ahead: number; behind: number }
     | { kind: 'blocked'; reason: string };
 
-/** The team repository cloned next to config.json. */
+/** The team repository, cloned into the pool folder. */
 export class PoolRepository {
     readonly dir: string;
     private readonly git: GitExec;
@@ -42,7 +42,7 @@ export class PoolRepository {
         if (await pathExists(this.dir)) {
             const entries = await fs.readdir(this.dir);
             if (entries.length > 0) {
-                throw new Error(`"${this.dir}" already exists and is not a Git repository. Remove it or pick another "directory" in config.json.`);
+                throw new Error(`"${this.dir}" already exists and is not a Git repository. Remove it or pick another folder name in the "mindpool.directory" setting.`);
             }
         }
         await fs.mkdir(path.dirname(this.dir), { recursive: true });
@@ -127,7 +127,7 @@ export class PoolRepository {
         return undefined;
     }
 
-    /** Switches to the configured branch when config.json changed it. */
+    /** Switches to the configured branch when the `mindpool.branch` setting changed. */
     async ensureBranch(branch: string): Promise<boolean> {
         if ((await this.currentBranch()) === branch) {
             return false;

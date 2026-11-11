@@ -2,6 +2,8 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import type { SettingsStore } from '../VsCodeExtension/core/config.ts';
+import type { PoolSettings } from '../VsCodeExtension/core/types.ts';
 
 /**
  * Test sandbox: real git repositories in a temp folder, with "remotes" being local bare
@@ -131,4 +133,24 @@ export class Sandbox {
 
 export function skillJson(skills: Record<string, unknown>, name = 'team-skills'): string {
     return `${JSON.stringify({ name, skills }, null, 4)}\n`;
+}
+
+/** Repository settings kept in memory, standing in for the VS Code settings. */
+export class MemorySettings implements SettingsStore {
+    values: Partial<PoolSettings>;
+    /** Every value saved through `write`, oldest first. */
+    readonly written: PoolSettings[] = [];
+
+    constructor(values: Partial<PoolSettings> = {}) {
+        this.values = values;
+    }
+
+    read(): Partial<PoolSettings> {
+        return this.values;
+    }
+
+    async write(values: PoolSettings): Promise<void> {
+        this.written.push(values);
+        this.values = { ...values };
+    }
 }

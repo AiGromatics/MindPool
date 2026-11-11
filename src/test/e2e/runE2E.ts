@@ -32,8 +32,6 @@ const team = sandbox.remote('team-skills', {
 
 const pool = sandbox.path('pool');
 
-sandbox.write('pool/config.json', `${JSON.stringify({ repository: team.url, branch: 'main' }, null, 4)}\n`);
-
 let exitCode = 0;
 try {
     exitCode = await runTests({
@@ -51,6 +49,7 @@ try {
         ],
         extensionTestsEnv: {
             MINDPOOL_E2E_POOL: pool,
+            MINDPOOL_E2E_TEAM_URL: team.url,
             MINDPOOL_E2E_TEAM_WORK: team.work,
             MINDPOOL_E2E_SKILL_TWO: skillTwo.url,
         },

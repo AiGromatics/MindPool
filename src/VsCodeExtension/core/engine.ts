@@ -1,6 +1,6 @@
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
-import { CONFIG_FILE, readConfig, writeConfig } from './config.ts';
+import { cleanSettings, isBlank, validateConfig, type SettingsStore } from './config.ts';
 import { shortSha, type GitExec, type RemoteRefs } from './git.ts';
 import { resolveLinkTargets, syncSkillLinks, type LinkResult } from './links.ts';
 import { createManifest, MANIFEST_FILE, readManifest, removeSkill, SKILLS_DIR, upsertSkill } from './manifest.ts';
@@ -12,7 +12,7 @@ import type {
     LogLevel,
     ManifestEntry,
     PoolConfig,
-    PoolConfigFile,
+    PoolSettings,
     PoolState,
     RemoteInfo,
     SkillSpec,
@@ -24,6 +24,8 @@ const MAX_LOG = 60;
 export interface EngineOptions {
     poolFolder: string;
     git: GitExec;
+    /** The repository settings (`mindpool.repository`, `mindpool.branch`, …). */
+    settings: SettingsStore;
     autoUpdateSkills?: boolean;
     /** Parallel skill checks (ls-remote / fetch). */
     concurrency?: number;
@@ -77,14 +79,15 @@ function linkGroups(links: readonly string[]): [string, string][] {
 }
 
 /**
- * The heart of MindPool: keeps the team repository (next to config.json) in sync with its
- * remote, and keeps every skill declared in skill.json downloaded inside `mindSkills/`.
+ * The heart of MindPool: keeps the team repository (cloned into the pool folder) in sync with
+ * its remote, and keeps every skill declared in skill.json downloaded inside `mindSkills/`.
  * All operations are serialised through a single queue, so timers, file watchers and
  * button clicks can never run git commands concurrently on the same repository.
  */
 export class MindPoolEngine {
     readonly poolFolder: string;
     private readonly git: GitExec;
+    private readonly settings: SettingsStore;
     private readonly concurrency: number;
     private readonly onLog?: (entry: LogEntry) => void;
     private readonly now: () => Date;
@@ -96,12 +99,12 @@ export class MindPoolEngine {
     private config?: PoolConfig;
     private repo?: PoolRepository;
     private skills?: SkillManager;
-    private lastConfigText?: string;
     private lastManifestText?: string;
 
     constructor(options: EngineOptions) {
         this.poolFolder = path.resolve(options.poolFolder);
         this.git = options.git;
+        this.settings = options.settings;
         this.concurrency = options.concurrency ?? 4;
         this.onLog = options.onLog;
         this.now = options.now ?? (() => new Date());
@@ -155,16 +158,15 @@ export class MindPoolEngine {
     }
 
     /**
-     * True when config.json / skill.json differ from what the engine last processed. Lets file
-     * watchers ignore the engine's own writes instead of triggering a second sync.
+     * True when skill.json differs from what the engine last processed. Lets the file watcher
+     * ignore the engine's own writes instead of triggering a second sync.
      */
-    async hasFileChanged(which: 'config' | 'manifest'): Promise<boolean> {
-        const file = which === 'config' ? path.join(this.poolFolder, CONFIG_FILE) : this.repo ? path.join(this.repo.dir, MANIFEST_FILE) : undefined;
-        if (!file) {
+    async hasManifestChanged(): Promise<boolean> {
+        if (!this.repo) {
             return true;
         }
-        const text = await fs.readFile(file, 'utf8').catch(() => undefined);
-        return text !== (which === 'config' ? this.lastConfigText : this.lastManifestText);
+        const text = await fs.readFile(path.join(this.repo.dir, MANIFEST_FILE), 'utf8').catch(() => undefined);
+        return text !== this.lastManifestText;
     }
 
     /** Serialises work; `label` (when given) is shown as the busy indicator. */
@@ -217,7 +219,7 @@ export class MindPoolEngine {
         return this.enqueue(
             undefined,
             async () => {
-                const config = await this.loadConfig();
+                const config = this.loadConfig();
                 if (config) {
                     await this.refreshRepoStatus(config);
                     await this.syncSkills({ network: false, update: false });
@@ -232,7 +234,7 @@ export class MindPoolEngine {
         const network = options.network ?? true;
         const update = options.updateSkills ?? this.autoUpdate;
         try {
-            const config = await this.loadConfig();
+            const config = this.loadConfig();
             if (!config || !this.repo) {
                 return;
             }
@@ -281,7 +283,7 @@ export class MindPoolEngine {
         }
     }
 
-    /** Puts the checkout where config.json says: the release tag, or the tip of the branch. */
+    /** Puts the checkout where the settings say: the release tag, or the tip of the branch. */
     private async alignRepository(config: PoolConfig, repo: PoolRepository): Promise<void> {
         if (config.tag) {
             const target = await repo.tagCommit(config.tag);
@@ -324,11 +326,11 @@ export class MindPoolEngine {
         }
     }
 
-    private async loadConfig(): Promise<PoolConfig | undefined> {
-        const result = await readConfig(this.poolFolder);
-        this.lastConfigText = result.text;
+    /** Reads and validates the repository settings. Nothing to connect to yet: `noConfig`. */
+    private loadConfig(): PoolConfig | undefined {
+        const raw = this.settings.read();
+        const result = validateConfig(raw);
         const reset: Partial<PoolState> = {
-            configPath: result.path,
             config: undefined,
             repo: undefined,
             skills: [],
@@ -337,9 +339,9 @@ export class MindPoolEngine {
             links: undefined,
             manifest: { exists: false },
         };
-        if (!result.exists) {
+        if (isBlank(raw.repository)) {
             this.config = undefined;
-            this.patch({ ...reset, phase: 'noConfig', configDraft: {}, configError: undefined });
+            this.patch({ ...reset, phase: 'noConfig', configDraft: result.draft, configError: undefined });
             return undefined;
         }
         if (!result.config) {
@@ -356,7 +358,6 @@ export class MindPoolEngine {
         }
         this.config = config;
         this.patch({
-            configPath: result.path,
             config,
             configDraft: result.draft,
             configError: undefined,
@@ -539,7 +540,7 @@ export class MindPoolEngine {
             throw new Error('Connect a skills repository first.');
         }
         if (writable && this.config.tag) {
-            throw new Error(`The repository is pinned to release ${this.config.tag} (read-only). Remove "tag" from config.json to edit it.`);
+            throw new Error(`The repository is pinned to release ${this.config.tag} (read-only). Clear the "mindpool.tag" setting to edit it.`);
         }
         return { config: this.config, repo: this.repo };
     }
@@ -617,10 +618,11 @@ export class MindPoolEngine {
         });
     }
 
-    saveConfig(values: PoolConfigFile): Promise<PoolState> {
-        return this.enqueue('Saving config', async () => {
-            await writeConfig(this.poolFolder, values);
-            this.log('success', 'Saved config.json');
+    /** Validates and stores new repository settings, then syncs with them. */
+    saveConfig(values: PoolSettings): Promise<PoolState> {
+        return this.enqueue('Saving settings', async () => {
+            await this.settings.write(cleanSettings(values));
+            this.log('success', 'Saved the repository settings');
             await this.doSync({ network: true });
             return this.current;
         });

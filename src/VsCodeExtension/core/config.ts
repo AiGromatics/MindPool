@@ -1,14 +1,25 @@
-import { promises as fs } from 'node:fs';
-import * as path from 'node:path';
-import type { PoolConfig, PoolConfigFile } from './types.ts';
+import type { PoolConfig, PoolSettings } from './types.ts';
 import { isSafeName, repoNameFromUrl, validateGitUrl, validateRefName } from './validation.ts';
 
-export const CONFIG_FILE = 'config.json';
+/** The repository settings, each stored in the VS Code settings as `mindpool.<key>`. */
+export const SETTING_KEYS = ['repository', 'branch', 'tag', 'directory', 'linkSkillsTo'] as const;
+
+/**
+ * Where the repository settings live: the VS Code settings in the extension, memory in tests.
+ * Values are typed loosely on purpose: users can write anything in settings.json, so whatever
+ * `read()` returns goes through {@link validateConfig}.
+ */
+export interface SettingsStore {
+    /** Current values. Called on every sync, so edits are picked up without a restart. */
+    read(): Partial<PoolSettings>;
+    /** Stores values saved from the dashboard. */
+    write(values: PoolSettings): Promise<void>;
+}
 
 export interface ConfigParseResult {
     config?: PoolConfig;
     /** Whatever could be read, to pre-fill the edit form. */
-    draft: Partial<PoolConfigFile>;
+    draft: Partial<PoolSettings>;
     error?: string;
 }
 
@@ -16,24 +27,32 @@ function asOptionalString(value: unknown): string | undefined {
     return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined;
 }
 
-/** `linkSkillsTo` accepts one folder or a list of folders. Empty entries and duplicates are dropped. */
+/** True for a setting that was left empty. */
+export function isBlank(value: unknown): boolean {
+    return value === undefined || value === null || (typeof value === 'string' && value.trim() === '');
+}
+
+/**
+ * `linkSkillsTo` is a list of folders. A single string is accepted too, for hand-written
+ * settings.json files. Empty entries and duplicates are dropped.
+ */
 export function parseLinkList(value: unknown): { values: string[]; error?: string } {
     if (value === undefined || value === null) {
         return { values: [] };
     }
     const items = typeof value === 'string' ? [value] : Array.isArray(value) ? (value as unknown[]) : undefined;
     if (!items || !items.every((item) => typeof item === 'string')) {
-        return { values: [], error: '"linkSkillsTo" must be a folder path or a list of folder paths.' };
+        return { values: [], error: '"mindpool.linkSkillsTo" must be a list of folder paths.' };
     }
     return { values: [...new Set((items as string[]).map((item) => item.trim()).filter(Boolean))] };
 }
 
 export function validateConfig(raw: unknown): ConfigParseResult {
     if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-        return { draft: {}, error: 'config.json must contain a JSON object.' };
+        return { draft: {}, error: 'The repository settings must be an object.' };
     }
     const obj = raw as Record<string, unknown>;
-    const draft: Partial<PoolConfigFile> = {
+    const draft: Partial<PoolSettings> = {
         repository: asOptionalString(obj['repository']),
         branch: asOptionalString(obj['branch']),
         tag: asOptionalString(obj['tag']),
@@ -48,8 +67,8 @@ export function validateConfig(raw: unknown): ConfigParseResult {
         errors.push(links.error);
     }
     for (const key of ['repository', 'branch', 'tag', 'directory'] as const) {
-        if (obj[key] !== undefined && typeof obj[key] !== 'string') {
-            errors.push(`"${key}" must be a string.`);
+        if (obj[key] !== undefined && obj[key] !== null && typeof obj[key] !== 'string') {
+            errors.push(`"mindpool.${key}" must be a string.`);
         }
     }
     const urlError = validateGitUrl(draft.repository ?? '');
@@ -67,7 +86,7 @@ export function validateConfig(raw: unknown): ConfigParseResult {
         }
     }
     if (draft.directory && (!isSafeName(draft.directory) || draft.directory === 'mindSkills')) {
-        errors.push(`"directory" must be a plain folder name (letters, digits, ".", "_", "-"), got "${draft.directory}".`);
+        errors.push(`"mindpool.directory" must be a plain folder name (letters, digits, ".", "_", "-"), got "${draft.directory}".`);
     }
     if (errors.length > 0) {
         return { draft, error: errors.join(' ') };
@@ -85,79 +104,32 @@ export function validateConfig(raw: unknown): ConfigParseResult {
     };
 }
 
-export function parseConfig(text: string): ConfigParseResult {
-    let raw: unknown;
-    try {
-        raw = JSON.parse(text);
-    } catch (error) {
-        return { draft: {}, error: `config.json is not valid JSON: ${(error as Error).message}` };
-    }
-    return validateConfig(raw);
-}
-
-export interface ReadConfigResult extends ConfigParseResult {
-    exists: boolean;
-    path: string;
-    /** Raw file content, used to detect real changes. */
-    text?: string;
-}
-
-export async function readConfig(folder: string): Promise<ReadConfigResult> {
-    const file = path.join(folder, CONFIG_FILE);
-    let text: string;
-    try {
-        text = await fs.readFile(file, 'utf8');
-    } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-            return { exists: false, path: file, draft: {} };
-        }
-        return { exists: true, path: file, draft: {}, error: `Cannot read config.json: ${(error as Error).message}` };
-    }
-    return { exists: true, path: file, text, ...parseConfig(text) };
-}
-
 /**
- * Writes config.json. Unknown keys already present in the file are preserved so teams can
- * keep their own annotations next to the MindPool settings.
+ * The values to store for a dashboard save: trimmed, with empty optional values left out and
+ * the clone folder left as typed (not derived). Throws when they are invalid.
  */
-export async function writeConfig(folder: string, values: PoolConfigFile): Promise<PoolConfig> {
-    const clean: PoolConfigFile = {
-        repository: values.repository.trim(),
-        branch: values.branch.trim(),
-        tag: values.tag?.trim() || undefined,
-        directory: values.directory?.trim() || undefined,
-        linkSkillsTo: values.linkSkillsTo,
-    };
-    const result = validateConfig(clean);
+export function cleanSettings(values: PoolSettings): PoolSettings {
+    const result = validateConfig(values);
     if (!result.config) {
-        throw new Error(result.error ?? 'Invalid configuration.');
+        throw new Error(result.error ?? 'Invalid repository settings.');
     }
-    const file = path.join(folder, CONFIG_FILE);
-    let existing: Record<string, unknown> = {};
-    try {
-        const parsed: unknown = JSON.parse(await fs.readFile(file, 'utf8'));
-        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-            existing = parsed as Record<string, unknown>;
-        }
-    } catch {
-        // missing or broken file: start fresh
-    }
-    const next: Record<string, unknown> = { ...existing, repository: clean.repository, branch: clean.branch };
-    for (const key of ['tag', 'directory'] as const) {
-        if (clean[key]) {
-            next[key] = clean[key];
-        } else {
-            delete next[key];
-        }
-    }
-    // A single folder is written as a plain string, the common case stays easy to read.
-    const links = result.config.linkSkillsTo;
-    if (links.length === 0) {
-        delete next['linkSkillsTo'];
-    } else {
-        next['linkSkillsTo'] = links.length === 1 ? links[0] : links;
-    }
-    await fs.mkdir(folder, { recursive: true });
-    await fs.writeFile(file, `${JSON.stringify(next, null, 4)}\n`, 'utf8');
-    return result.config;
+    return {
+        repository: result.config.repository,
+        branch: result.config.branch,
+        tag: result.config.tag,
+        directory: result.draft.directory,
+        linkSkillsTo: result.config.linkSkillsTo,
+    };
+}
+
+/** Canonical form: whitespace, `""` versus unset, and duplicate folders do not count as changes. */
+function canonical(values: Partial<PoolSettings>): string {
+    const text = (value: unknown): unknown => (typeof value === 'string' ? value.trim() : (value ?? ''));
+    const links = parseLinkList(values.linkSkillsTo);
+    return JSON.stringify([text(values.repository), text(values.branch), text(values.tag), text(values.directory), links.error ? values.linkSkillsTo : links.values]);
+}
+
+/** True when both sets of values describe the same setup, so no new sync is needed. */
+export function sameSettings(a: Partial<PoolSettings>, b: Partial<PoolSettings>): boolean {
+    return canonical(a) === canonical(b);
 }

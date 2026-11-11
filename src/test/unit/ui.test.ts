@@ -73,7 +73,7 @@ describe('renderApp', () => {
             NOW,
         );
         assert.match(html, /2 skills linked into <span class="path" title="\/home\/me\/.claude\/skills">~\/.claude\/skills<\/span>/);
-        assert.match(html, /Skill links need attention/);
+        assert.match(html, /Skill links need attention.*data-command="openSettings"/);
         assert.ok(html.includes('&lt;b&gt;nskill&lt;/b&gt; already exists'));
         assert.ok(!renderApp(readyState(), ui(), NOW).includes('linked into'), 'nothing shown when links are off');
 
@@ -105,7 +105,9 @@ describe('renderApp', () => {
             ui(),
             NOW,
         );
-        assert.match(invalid, /config.json needs a fix/);
+        assert.match(invalid, /The repository settings need a fix/);
+        assert.match(invalid, /data-command="openSettings"/);
+        assert.doesNotMatch(invalid, /config\.json/);
         assert.match(invalid, /value="https:\/\/x\/y.git"/);
     });
 

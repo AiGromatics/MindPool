@@ -19,7 +19,7 @@ function setup(name: string): { remote: ReturnType<Sandbox['remote']>; repo: Poo
 }
 
 describe('PoolRepository', () => {
-    test('clones the configured branch next to config.json', async () => {
+    test('clones the configured branch into the pool folder', async () => {
         const { repo, config, remote } = setup('clone');
         assert.equal(await repo.isCloned(), false);
         await repo.clone(config);
@@ -135,7 +135,7 @@ describe('PoolRepository', () => {
         await assert.rejects(repo.checkoutTag('v9.0.0'), /does not exist/);
     });
 
-    test('switches branch when config.json changes it, and updates the remote URL', async () => {
+    test('switches branch when the setting changes, and updates the remote URL', async () => {
         const { repo, config, remote } = setup('switch');
         remote.branch('develop');
         await repo.clone(config);

@@ -110,8 +110,8 @@
                 "icon": "$(multiple-windows)"
             },
             {
-                "command": "mindpool.openConfig",
-                "title": "Open config.json",
+                "command": "mindpool.openSettings",
+                "title": "Open Settings",
                 "category": "MindPool",
                 "icon": "$(gear)"
             },
@@ -158,7 +158,7 @@
                     "group": "navigation@3"
                 },
                 {
-                    "command": "mindpool.openConfig",
+                    "command": "mindpool.openSettings",
                     "when": "view == mindpool.dashboard",
                     "group": "more@1"
                 },
@@ -181,28 +181,67 @@
                     "type": "string",
                     "default": "",
                     "scope": "machine-overridable",
-                    "markdownDescription": "Folder that contains the `config.json` pointing at your team skills repository. Supports `~`, `${userHome}` and `${workspaceFolder}`."
+                    "order": 0,
+                    "markdownDescription": "Folder where MindPool clones your team skills repository. Supports `~`, `${userHome}` and `${workspaceFolder}`."
+                },
+                "mindpool.repository": {
+                    "type": "string",
+                    "default": "",
+                    "order": 1,
+                    "markdownDescription": "Git URL of your team skills repository (https, ssh or a local path), for example `https://github.com/acme/team-skills.git` or `git@github.com:acme/team-skills.git`."
+                },
+                "mindpool.branch": {
+                    "type": "string",
+                    "default": "main",
+                    "order": 2,
+                    "markdownDescription": "Branch of the team repository to track. New commits are fast-forwarded automatically. Required, even with a `#mindpool.tag#`: the clone starts from it."
+                },
+                "mindpool.tag": {
+                    "type": "string",
+                    "default": "",
+                    "order": 3,
+                    "markdownDescription": "Optional release tag to pin, for example `v1.4.0`. The checkout becomes **read-only** (no commit or push), and newer releases are offered with a one-click upgrade. Leave empty to follow `#mindpool.branch#`."
+                },
+                "mindpool.directory": {
+                    "type": "string",
+                    "default": "",
+                    "order": 4,
+                    "markdownDescription": "Optional name of the folder, inside `#mindpool.poolFolder#`, that holds the clone. Leave empty to use the repository name. It can't be `mindSkills`."
+                },
+                "mindpool.linkSkillsTo": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "default": [],
+                    "scope": "machine-overridable",
+                    "order": 5,
+                    "markdownDescription": "Optional folders where every installed skill gets a link, for example `~/.claude/skills`, so tools that only look one level deep (like Claude Code) find the skills downloaded in `mindSkills/`. Supports `~` and `${userHome}`; a relative path starts at `#mindpool.poolFolder#`."
                 },
                 "mindpool.autoSync": {
                     "type": "boolean",
                     "default": true,
-                    "description": "Sync automatically on startup, on an interval and when config.json / skill.json change."
+                    "order": 6,
+                    "description": "Sync automatically on startup, on an interval and when the MindPool settings or skill.json change."
                 },
                 "mindpool.syncIntervalMinutes": {
                     "type": "number",
                     "default": 15,
                     "minimum": 0,
+                    "order": 7,
                     "description": "Minutes between automatic syncs. 0 disables the timer."
                 },
                 "mindpool.autoUpdateSkills": {
                     "type": "boolean",
                     "default": true,
+                    "order": 8,
                     "description": "Install newer skill versions automatically during sync. When off, updates are only reported."
                 },
                 "mindpool.gitPath": {
                     "type": "string",
                     "default": "git",
                     "scope": "machine",
+                    "order": 9,
                     "description": "Path to the git executable."
                 }
             }

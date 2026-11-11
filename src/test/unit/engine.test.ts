@@ -5,7 +5,7 @@ import { after, describe, test } from 'node:test';
 import { MindPoolEngine } from '../../VsCodeExtension/core/engine.ts';
 import { createGit } from '../../VsCodeExtension/core/git.ts';
 import type { PoolState } from '../../VsCodeExtension/core/types.ts';
-import { git, Sandbox, skillJson, type Remote } from '../helpers.ts';
+import { git, MemorySettings, Sandbox, skillJson, type Remote } from '../helpers.ts';
 
 const sandbox = new Sandbox();
 after(() => sandbox.cleanup());
@@ -17,6 +17,7 @@ interface World {
     writer: Remote;
     reviewer: Remote;
     engine: MindPoolEngine;
+    settings: MemorySettings;
     repoDir: string;
 }
 
@@ -35,9 +36,9 @@ function world(options: { autoUpdate?: boolean; tag?: string; skills?: (w: { wri
         team.tag(options.tag);
     }
     const pool = sandbox.path('pools', id);
-    sandbox.write(path.relative(sandbox.root, path.join(pool, 'config.json')), JSON.stringify({ repository: team.url, branch: 'main', tag: options.tag, directory: 'team' }));
-    const engine = new MindPoolEngine({ poolFolder: pool, git: createGit(), autoUpdateSkills: options.autoUpdate ?? true });
-    return { pool, team, writer, reviewer, engine, repoDir: path.join(pool, 'team') };
+    const settings = new MemorySettings({ repository: team.url, branch: 'main', tag: options.tag, directory: 'team' });
+    const engine = new MindPoolEngine({ poolFolder: pool, git: createGit(), settings, autoUpdateSkills: options.autoUpdate ?? true });
+    return { pool, team, writer, reviewer, engine, settings, repoDir: path.join(pool, 'team') };
 }
 
 function skill(state: PoolState, name: string) {
@@ -183,8 +184,7 @@ describe('MindPoolEngine: editing and sharing', () => {
 
         // A teammate with their own pool folder.
         const teammatePool = sandbox.path('pools', `teammate-${counter}`);
-        sandbox.write(path.relative(sandbox.root, path.join(teammatePool, 'config.json')), JSON.stringify({ repository: w.team.url, branch: 'main' }));
-        const teammate = new MindPoolEngine({ poolFolder: teammatePool, git: createGit() });
+        const teammate = new MindPoolEngine({ poolFolder: teammatePool, git: createGit(), settings: new MemorySettings({ repository: w.team.url, branch: 'main' }) });
         const theirs = await teammate.sync();
         assert.equal(theirs.config?.directory, path.basename(w.team.url, '.git'), 'folder derived from the URL');
         assert.ok(theirs.skills.some((s) => s.name === 'planner' && s.health === 'ok'));
@@ -226,8 +226,7 @@ describe('MindPoolEngine: editing and sharing', () => {
     test('createManifest bootstraps a repository without skill.json', async () => {
         const team = sandbox.remote(`bare-team-${counter++}`, { 'README.md': 'empty team\n' });
         const pool = sandbox.path('pools', `bare-${counter}`);
-        sandbox.write(path.relative(sandbox.root, path.join(pool, 'config.json')), JSON.stringify({ repository: team.url, branch: 'main' }));
-        const engine = new MindPoolEngine({ poolFolder: pool, git: createGit() });
+        const engine = new MindPoolEngine({ poolFolder: pool, git: createGit(), settings: new MemorySettings({ repository: team.url, branch: 'main' }) });
         let state = await engine.sync();
         assert.equal(state.manifest.exists, false);
         state = await engine.createManifest();
@@ -236,26 +235,46 @@ describe('MindPoolEngine: editing and sharing', () => {
     });
 });
 
-describe('MindPoolEngine: configuration', () => {
-    test('no config, invalid config, then saveConfig clones', async () => {
+describe('MindPoolEngine: repository settings', () => {
+    test('no repository, invalid settings, then saveConfig stores clean values and clones', async () => {
         const team = sandbox.remote(`cfg-team-${counter++}`, { 'skill.json': skillJson({}) });
         const pool = sandbox.path('pools', `cfg-${counter}`);
-        const engine = new MindPoolEngine({ poolFolder: pool, git: createGit() });
+        const settings = new MemorySettings();
+        const engine = new MindPoolEngine({ poolFolder: pool, git: createGit(), settings });
         let state = await engine.sync();
         assert.equal(state.phase, 'noConfig');
 
-        sandbox.write(path.relative(sandbox.root, path.join(pool, 'config.json')), '{"repository": "", "branch": "main"}');
+        settings.values = { repository: '  ', branch: 'develop' };
+        state = await engine.sync();
+        assert.equal(state.phase, 'noConfig', 'a blank repository means "not connected yet"');
+        assert.equal(state.configError, undefined);
+        assert.equal(state.configDraft?.branch, 'develop', 'the other settings pre-fill the form');
+
+        settings.values = { repository: 'https://example.com/acme/skills.git', branch: '' };
         state = await engine.sync();
         assert.equal(state.phase, 'invalidConfig');
-        assert.match(state.configError ?? '', /Repository URL is required/);
-        assert.equal(state.configDraft?.branch, 'main');
+        assert.match(state.configError ?? '', /Branch is required/);
+        assert.equal(state.configDraft?.repository, 'https://example.com/acme/skills.git');
 
-        assert.equal(await engine.hasFileChanged('config'), false);
-        state = await engine.saveConfig({ repository: team.url, branch: 'main', directory: 'pool-repo' });
+        await assert.rejects(engine.saveConfig({ repository: '--upload-pack=x', branch: 'main' }), /must not start/);
+        assert.deepEqual(settings.written, [], 'invalid values are never stored');
+
+        state = await engine.saveConfig({ repository: ` ${team.url} `, branch: 'main', tag: '', directory: 'pool-repo', linkSkillsTo: [] });
         assert.equal(state.phase, 'ready');
         assert.equal(state.repo?.path, path.join(pool, 'pool-repo'));
-        assert.equal(await engine.hasFileChanged('config'), false, 'the engine knows about its own write');
-        assert.equal(await engine.hasFileChanged('manifest'), false);
+        assert.deepEqual(settings.written, [{ repository: team.url, branch: 'main', tag: undefined, directory: 'pool-repo', linkSkillsTo: [] }]);
+        assert.ok(state.log.some((l) => l.message === 'Saved the repository settings'));
+        assert.equal(await engine.hasManifestChanged(), false, 'the engine knows the skill.json it read');
+    });
+
+    test('settings edited elsewhere are picked up by the next sync', async () => {
+        const w = world();
+        await w.engine.sync();
+        w.settings.values = { ...w.settings.values, directory: 'moved' };
+        const state = await w.engine.sync();
+        assert.equal(state.phase, 'ready', state.lastError ?? 'sync failed');
+        assert.equal(state.repo?.path, path.join(w.pool, 'moved'));
+        assert.ok(existsSync(path.join(w.pool, 'moved', 'mindSkills', 'writer', 'SKILL.md')));
     });
 
     test('a release tag pins the repository read-only and offers newer releases', async () => {
@@ -286,8 +305,8 @@ describe('MindPoolEngine: configuration', () => {
 
     test('a clone failure is reported without throwing', async () => {
         const pool = sandbox.path('pools', `broken-${counter++}`);
-        sandbox.write(path.relative(sandbox.root, path.join(pool, 'config.json')), JSON.stringify({ repository: sandbox.path('remotes', 'missing.git'), branch: 'main' }));
-        const engine = new MindPoolEngine({ poolFolder: pool, git: createGit() });
+        const settings = new MemorySettings({ repository: sandbox.path('remotes', 'missing.git'), branch: 'main' });
+        const engine = new MindPoolEngine({ poolFolder: pool, git: createGit(), settings });
         const state = await engine.sync();
         assert.equal(state.phase, 'notCloned');
         assert.ok(state.lastError);
@@ -318,14 +337,14 @@ describe('MindPoolEngine: concurrency', () => {
 describe('MindPoolEngine: skill links (linkSkillsTo)', () => {
     function linkWorld(linkSkillsTo: unknown): World {
         const w = world();
-        writeFileSync(path.join(w.pool, 'config.json'), JSON.stringify({ repository: w.team.url, branch: 'main', directory: 'team', linkSkillsTo }));
+        w.settings.values = { repository: w.team.url, branch: 'main', directory: 'team', linkSkillsTo: linkSkillsTo as string[] };
         return w;
     }
     const isLink = (p: string): boolean => existsSync(p) && lstatSync(p).isSymbolicLink();
 
     test('links the installed skills, follows skill.json and cleans up when the option is removed', async () => {
         const target = sandbox.path('homes', `h${counter + 1}`, '.claude', 'skills');
-        const w = linkWorld(target);
+        const w = linkWorld([target]);
         let state = await w.engine.sync();
         assert.deepEqual(state.links, { targets: [{ path: target, linked: 2 }], problems: [] });
         assert.equal(readFileSync(path.join(target, 'writer', 'SKILL.md'), 'utf8'), '# Writer\n');
@@ -343,23 +362,23 @@ describe('MindPoolEngine: skill links (linkSkillsTo)', () => {
         assert.ok(state.log.some((l) => l.message === `Unlinked reviewer from ${target}`));
         assert.deepEqual(state.links?.targets, [{ path: target, linked: 1 }]);
 
-        writeFileSync(path.join(w.pool, 'config.json'), JSON.stringify({ repository: w.team.url, branch: 'main', directory: 'team' }));
+        w.settings.values = { repository: w.team.url, branch: 'main', directory: 'team', linkSkillsTo: [] };
         state = await w.engine.sync();
         assert.equal(isLink(path.join(target, 'writer')), false, 'links removed with the option');
         assert.equal(state.links, undefined);
     });
 
-    test('issue #1 layout: a pool folder inside .claude/skills links the skills next to config.json', async () => {
-        const w = linkWorld('.');
+    test('issue #1 layout: a pool folder inside .claude/skills links the skills into the pool folder itself', async () => {
+        const w = linkWorld(['.']);
         const state = await w.engine.sync();
         assert.deepEqual(state.links?.problems, []);
         assert.equal(readFileSync(path.join(w.pool, 'writer', 'SKILL.md'), 'utf8'), '# Writer\n');
         assert.equal(readFileSync(path.join(w.pool, 'reviewer', 'SKILL.md'), 'utf8'), '# Reviewer\n');
-        assert.equal(existsSync(path.join(w.pool, 'config.json')), true);
+        assert.equal(existsSync(path.join(w.repoDir, '.git')), true, 'the clone next to the links is untouched');
     });
 
     test('refuses a folder inside the team repository and reports it once', async () => {
-        const w = linkWorld('team/links');
+        const w = linkWorld(['team/links']);
         let state = await w.engine.sync();
         assert.equal(state.links?.targets.length, 0);
         assert.match(state.links?.problems[0] ?? '', /inside the team repository/);
@@ -369,7 +388,7 @@ describe('MindPoolEngine: skill links (linkSkillsTo)', () => {
         assert.equal(state.log.filter((l) => l.level === 'warn').length, warnings, 'not logged again');
     });
 
-    test('an invalid linkSkillsTo makes config.json invalid', async () => {
+    test('an invalid linkSkillsTo makes the settings invalid', async () => {
         const w = linkWorld(42);
         const state = await w.engine.sync();
         assert.equal(state.phase, 'invalidConfig');

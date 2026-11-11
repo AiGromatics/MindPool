@@ -159,7 +159,7 @@ function renderWelcome(): string {
         `<h2>Welcome to MindPool</h2>` +
         `<p>Keep your team's AI skills in one private Git repository and sync them everywhere, without publishing anything to the wild web.</p>` +
         `<ol class="steps">` +
-        `<li><b>Pick a pool folder.</b> MindPool keeps its <code>config.json</code> there.</li>` +
+        `<li><b>Pick a pool folder.</b> MindPool clones your team repository there.</li>` +
         `<li><b>Connect</b> your team repository: a branch, and a release tag if you want one.</li>` +
         `<li><b>Relax.</b> Skills from <code>skill.json</code> land in <code>mindSkills/</code> and stay fresh.</li>` +
         `</ol>` +
@@ -218,9 +218,10 @@ function renderConfigForm(state: PoolState, ui: UiState): string {
     const isEdit = state.phase === 'ready' || state.phase === 'notCloned';
     const head = cardHead('config', 'link', isEdit ? 'Repository settings' : 'Connect your skills repository', ui);
     const body =
-        (state.configError ? banner('error', 'alert', `<b>config.json needs a fix.</b> ${esc(state.configError)}`) : '') +
-        `<p class="muted">MindPool clones the repository next to <code>config.json</code> in ` +
-        `<span class="path" title="${esc(state.poolFolder)}">${esc(tildify(state.poolFolder, ui.home))}</span>. ` +
+        (state.configError ? banner('error', 'alert', `<b>The repository settings need a fix.</b> ${esc(state.configError)}`) : '') +
+        `<p class="muted">MindPool clones the repository into ` +
+        `<span class="path" title="${esc(state.poolFolder)}">${esc(tildify(state.poolFolder, ui.home))}</span> ` +
+        `and saves these values in your VS Code settings. ` +
         `<a href="#" data-action="run" data-command="selectFolder">Change folder</a></p>` +
         `<form class="form" data-form="config" autocomplete="off">` +
         `<label class="field"><span>Repository URL</span>` +
@@ -239,7 +240,7 @@ function renderConfigForm(state: PoolState, ui: UiState): string {
         `<div class="toolbar">` +
         button({ label: isEdit ? 'Save & sync' : 'Save & clone', iconName: 'download', action: 'saveConfig', variant: 'primary', id: 'cfg-save', disabled: !draft.repository.trim() || !draft.branch.trim() }) +
         (isEdit && state.phase === 'ready' ? button({ label: 'Cancel', action: 'cancelConfig', variant: 'ghost' }) : '') +
-        command('openConfig', { label: 'Edit JSON', iconName: 'file', variant: 'ghost' }) +
+        command('openSettings', { label: 'Open settings', iconName: 'gear', variant: 'ghost' }) +
         `</div></form>`;
     return card('config', ui, head, body);
 }
@@ -522,7 +523,7 @@ function renderLinks(state: PoolState, ui: UiState): string {
     return (
         (links.targets.length > 0 ? `<p class="muted small links">${icon('link')} ${where}</p>` : '') +
         (links.problems.length > 0
-            ? banner('warn', 'alert', `<b>Skill links need attention.</b> ${links.problems.map((p) => esc(p)).join('<br>')}`, command('openConfig', { label: 'Open config.json', iconName: 'file' }))
+            ? banner('warn', 'alert', `<b>Skill links need attention.</b> ${links.problems.map((p) => esc(p)).join('<br>')}`, command('openSettings', { label: 'Open settings', iconName: 'gear' }))
             : '')
     );
 }

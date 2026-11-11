@@ -3,8 +3,8 @@
  * Everything here must stay JSON-serialisable because it is posted to the webview.
  */
 
-/** Shape of `config.json` as written on disk. */
-export interface PoolConfigFile {
+/** Repository settings, stored in the VS Code settings as `mindpool.<key>`. */
+export interface PoolSettings {
     /** Git URL of the team skills repository. */
     repository: string;
     /** Branch to track (required). */
@@ -14,10 +14,10 @@ export interface PoolConfigFile {
     /** Optional folder name (inside the pool folder) where the repository is cloned. */
     directory?: string;
     /**
-     * Optional folder(s) where every installed skill gets a link, e.g. `~/.claude/skills`, so AI
+     * Optional folders where every installed skill gets a link, e.g. `~/.claude/skills`, so AI
      * tools that only look one level deep find the skills downloaded in mindSkills.
      */
-    linkSkillsTo?: string | string[];
+    linkSkillsTo?: string[];
 }
 
 /** Validated config with every default resolved. */
@@ -101,7 +101,7 @@ export interface RepoStatus {
     branch?: string;
     head?: string;
     detached: boolean;
-    /** Tag the repository is pinned to (from config.json). */
+    /** Tag the repository is pinned to (the `mindpool.tag` setting). */
     tag?: string;
     readOnly: boolean;
     ahead: number;
@@ -133,7 +133,7 @@ export interface LinkTargetStatus {
     linked: number;
 }
 
-/** Skill links requested by `linkSkillsTo` in config.json. */
+/** Skill links requested by the `mindpool.linkSkillsTo` setting. */
 export interface LinkState {
     targets: LinkTargetStatus[];
     /** Links that could not be created (name taken, no SKILL.md, invalid folder, …). */
@@ -150,10 +150,9 @@ export interface ManifestInfo {
 export interface PoolState {
     phase: PoolPhase;
     poolFolder?: string;
-    configPath?: string;
     config?: PoolConfig;
-    /** Raw config values, used to pre-fill the edit form even when invalid. */
-    configDraft?: Partial<PoolConfigFile>;
+    /** Raw setting values, used to pre-fill the edit form even when invalid. */
+    configDraft?: Partial<PoolSettings>;
     configError?: string;
     repo?: RepoStatus;
     manifest: ManifestInfo;
@@ -161,7 +160,7 @@ export interface PoolState {
     /** Folders inside mindSkills that are no longer declared in skill.json. */
     orphans: string[];
     skillsDir?: string;
-    /** Set when config.json has `linkSkillsTo`. */
+    /** Set when `mindpool.linkSkillsTo` names folders (or links are still being cleaned up). */
     links?: LinkState;
     busy?: string;
     lastSync?: string;
@@ -186,7 +185,6 @@ export const HOST_COMMANDS = [
     'push',
     'openInNewWindow',
     'selectFolder',
-    'openConfig',
     'openManifest',
     'createManifest',
     'updateSkills',
@@ -205,7 +203,7 @@ export type WebviewToHost =
     | { type: 'ready' }
     | { type: 'run'; command: HostCommand }
     | { type: 'commit'; message: string; files: string[]; push: boolean }
-    | { type: 'saveConfig'; config: PoolConfigFile }
+    | { type: 'saveConfig'; config: PoolSettings }
     | { type: 'inspectRemote'; url: string; requestId: number; purpose: RemotePurpose }
     | { type: 'addSkill'; name: string; spec: SkillSpec }
     | { type: 'removeSkill'; name: string }

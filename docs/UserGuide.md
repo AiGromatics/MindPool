@@ -32,11 +32,11 @@ The MindPool icon appears in the activity bar.
    **Check repository** confirms you have access and suggests branches and tags.
 3. Click **Save & clone**.
 
-MindPool saves your answers in `config.json`, clones the repository and downloads every skill:
+MindPool saves your answers in your VS Code settings, clones the repository and downloads every
+skill:
 
 ```
 ~/MindPool/
-├── config.json
 └── Skills/                      ← the team repository
     ├── skill.json               ← the list of shared skills
     └── mindSkills/              ← downloaded skills (never committed)
@@ -44,8 +44,10 @@ MindPool saves your answers in `config.json`, clones the repository and download
             └── skills/          ← brainstorming, systematic-debugging, writing-plans, …
 ```
 
-> If a teammate gave you a `config.json`, put it in a folder and choose that folder in step 1.
-> MindPool skips the form and starts cloning.
+> The answers are ordinary settings (`mindpool.repository`, `mindpool.branch`, …). To change them
+> later, click ⚙ on the **Repository** card, or run **MindPool: Open Settings**. If a teammate
+> sends you their settings, paste them into your `settings.json`: MindPool skips the form and
+> starts cloning as soon as a pool folder is chosen.
 
 ## 3. Use the skills
 
@@ -59,8 +61,9 @@ skills there:
 1. Click ⚙ on the **Repository** card.
 2. Set **Link skills into** to `~/.claude/skills` and click **Save & sync**.
 
-MindPool writes `"linkSkillsTo": "~/.claude/skills"` to `config.json`. Every skill now has a link
-in that folder, so superpowers shows up as `brainstorming`, `writing-plans` and its other skills.
+MindPool saves `~/.claude/skills` in the `mindpool.linkSkillsTo` setting. Every skill now has a
+link in that folder, so superpowers shows up as `brainstorming`, `writing-plans` and its other
+skills.
 The links are updated on every sync. The **Skills** card shows how many are in place, and warns
 if a folder with the same name is already there. MindPool never replaces such a folder.
 
@@ -71,7 +74,7 @@ Don't edit files in `mindSkills/` (see [Troubleshooting](#7-troubleshooting)).
 ## 4. Stay up to date
 
 You don't have to do anything. MindPool syncs when VS Code starts, every 15 minutes, and whenever
-`config.json` or `skill.json` changes. Click **Sync** at any time to sync right away.
+the MindPool settings or `skill.json` change. Click **Sync** at any time to sync right away.
 
 Each sync pulls the team's new commits and installs newer skill versions. superpowers is listed as
 `^7.0.2`, so every new 7.x release installs automatically. A v8 is only *reported* until someone
@@ -118,10 +121,11 @@ everyone's `mindSkills/` on their next sync.
 | **Offline** or **Repository not reachable** | Check your network or Git login. The skills you already have keep working, and MindPool tries again on the next sync. |
 | *"Pull first, then push again"* | A teammate pushed first. Click **Pull**, then **Push**. |
 | *"Local and remote both moved"* | Click **Pull** to put your commits on top of the team's, then **Push**. |
-| **Pinned release: read-only** | `config.json` has a release tag, so you can't commit. To upgrade, click **Use v…** when a newer release is offered. To edit, remove the tag in the repository settings (⚙). |
+| **Pinned release: read-only** | The `mindpool.tag` setting holds a release tag, so you can't commit. To upgrade, click **Use v…** when a newer release is offered. To edit, remove the tag in the repository settings (⚙). |
 | **skill.json has a problem** | Click **Open**. The message tells you which entry is wrong. |
 | **Skill links need attention** | A folder or link with that name already exists in the link folder, and MindPool won't replace it. Rename or delete it, and the next sync creates the link. If the message says a skill *has no SKILL.md*, that skill's repository isn't laid out as a skill. |
 | Claude Code doesn't see the skills | Set **Link skills into** to `~/.claude/skills` (see [Use the skills](#3-use-the-skills)). |
 
-All settings (`mindpool.poolFolder`, `mindpool.syncIntervalMinutes`, `mindpool.autoUpdateSkills`
-and more) are described in the [README](../README.md#settings).
+All settings (`mindpool.repository`, `mindpool.poolFolder`, `mindpool.syncIntervalMinutes`,
+`mindpool.autoUpdateSkills` and more) are described in the
+[README](../README.md#repository-settings).

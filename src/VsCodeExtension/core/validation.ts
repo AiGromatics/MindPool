@@ -1,9 +1,10 @@
 import * as path from 'node:path';
 
 /**
- * Validation helpers. Values coming from config.json / skill.json are shared through a
- * team repository, so they are treated as untrusted: names must never escape their parent
- * folder and nothing may be interpreted by git as a command-line option.
+ * Validation helpers. Values coming from skill.json are shared through a team repository, and
+ * settings can come from a workspace's .vscode/settings.json, so both are treated as untrusted:
+ * names must never escape their parent folder and nothing may be interpreted by git as a
+ * command-line option.
  */
 
 const SAFE_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/;
