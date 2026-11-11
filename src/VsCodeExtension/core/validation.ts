@@ -94,6 +94,15 @@ export function expandFolderPath(raw: string, ctx: ExpandContext): { path?: stri
     return { path: path.normalize(value) };
 }
 
+/**
+ * Where a new value for a setting has to be written so that VS Code reads it back. A value in
+ * the workspace settings (even `""`) overrides the user settings, so writing to the user
+ * settings would change nothing.
+ */
+export function settingTarget(inspected: { workspaceValue?: unknown } | undefined): 'workspace' | 'global' {
+    return inspected?.workspaceValue !== undefined ? 'workspace' : 'global';
+}
+
 /** True when `child` is `parent` itself or lives inside it. */
 export function isInside(parent: string, child: string): boolean {
     const relative = path.relative(path.resolve(parent), path.resolve(child));

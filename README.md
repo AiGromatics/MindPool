@@ -1,7 +1,32 @@
 # MindPool
 
-A small VS Code extension that manages your team's AI skills **privately**, straight from a Git
-repository, without publishing anything to the wild web.
+[![Visual Studio Marketplace](https://vsmarketplacebadges.dev/version-short/aigromatics.mindpool.svg)](https://marketplace.visualstudio.com/items?itemName=aigromatics.mindpool)
+[![Installs](https://vsmarketplacebadges.dev/installs-short/aigromatics.mindpool.svg)](https://marketplace.visualstudio.com/items?itemName=aigromatics.mindpool)
+[![GitHub stars](https://img.shields.io/github/stars/AiGromatics/MindPool?style=flat&logo=github)](https://github.com/AiGromatics/MindPool)
+[![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-1F5C55)](LICENSE)
+
+**A `package.json` for your team's AI skills.** List them in a `skill.json`, keep it in a private
+Git repository, and MindPool keeps every teammate's skills installed, versioned and in sync.
+Nothing is published to the web.
+
+![MindPool in 18 seconds: every teammate has a different copy of the skills; MindPool keeps them in one private Git repository, installs them, updates them by branch, tag or semver range, never overwrites local edits, and manages it all from one sidebar.](docs/images/mindpool.gif)
+
+## Why MindPool
+
+- **Every teammate has a different copy.** Skills get edited, forgotten and left behind.
+  MindPool installs the same versions on every machine and keeps them up to date.
+- **Private by design.** Skills live in your own Git repository and travel with your normal Git
+  credentials. Nothing goes to a public registry.
+- **Versioned like npm.** Track a branch, pin a release tag, or follow a semver range such as
+  `^1.2.0` that upgrades by itself.
+- **Local edits are safe.** A skill you changed by hand is never overwritten. You decide when to
+  reinstall it.
+
+Works with **Claude Code** out of the box: set [`linkSkillsTo`](#skill-links) to
+`~/.claude/skills` and every team skill shows up there. Any other tool that reads skill folders
+works the same way.
+
+## How it works
 
 - Point MindPool at a **pool folder** that holds a `config.json`.
 - It clones your **team skills repository** next to that file and keeps it in sync, pulling new
@@ -15,9 +40,12 @@ repository, without publishing anything to the wild web.
 
 ## Quick start
 
-1. Open the **MindPool** icon in the activity bar.
-2. Click **Choose pool folder** (any folder, for example `~/MindPool`).
-3. Fill in the repository URL and branch, optionally a release tag, then **Save & clone**.
+1. Install MindPool from the
+   [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=aigromatics.mindpool),
+   or run `code --install-extension aigromatics.mindpool`.
+2. Open the **MindPool** icon in the activity bar.
+3. Click **Choose pool folder** (any folder, for example `~/MindPool`).
+4. Fill in the repository URL and branch, optionally a release tag, then **Save & clone**.
 
 That's it. MindPool writes `config.json`, clones the repository and installs the skills.
 
@@ -106,6 +134,8 @@ Safety rules:
 
 ## The dashboard
 
+![The MindPool sidebar: the Repository card with Sync, Pull, Push and Open, the Changes card and the Skills list.](docs/images/dashboard.png)
+
 
 | Card           | What you can do                                                                                                                                                                                                                            |
 | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -179,6 +209,23 @@ npm run package
 - `--no-git` only writes the files, and `--json` prints the result for CI.
 - The script refuses to release from a dirty working tree, a detached HEAD or a branch that is
   behind its upstream. It never pushes.
+
+#### Publishing
+
+Publish every release to both registries. Cursor, Windsurf and VSCodium install extensions from
+[Open VSX](https://open-vsx.org), not from the Visual Studio Marketplace.
+
+```bash
+npm run publish:marketplace   # token in VSCE_PAT, or `npx vsce login aigromatics` once
+npm run publish:ovsx          # token in OVSX_PAT
+```
+
+Both commands package the extension first, so they run the type check and the build. Images in
+this README are served from GitHub, so push before you publish.
+
+The first Open VSX release needs an [open-vsx.org](https://open-vsx.org) account (signed in with
+GitHub), the signed Publisher Agreement, an access token, and the namespace:
+`npx ovsx create-namespace aigromatics -p <token>`.
 
 ### Architecture: one monolith
 

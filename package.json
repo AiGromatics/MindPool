@@ -1,11 +1,12 @@
 {
     "name": "mindpool",
-    "displayName": "MindPool",
+    "displayName": "MindPool – Team AI Skills Sync",
     "version": "1.0.1",
-    "description": "MindPool is a small tool to sync your team AI skills in one go, from a private Git repository.",
+    "description": "Share your team's AI skills (Claude Code and any SKILL.md tool) from a private Git repository. A skill.json works like package.json: pin tags or semver ranges, and every teammate stays in sync.",
     "publisher": "aigromatics",
     "author": "AiGromatics",
     "license": "GPL-3.0",
+    "pricing": "Free",
     "icon": "media/icon.png",
     "galleryBanner": {
         "color": "#1F5C55",
@@ -13,6 +14,10 @@
     },
     "type": "module",
     "main": "./dist/main.cjs",
+    "homepage": "https://github.com/AiGromatics/MindPool#readme",
+    "bugs": {
+        "url": "https://github.com/AiGromatics/MindPool/issues"
+    },
     "repository": {
         "type": "git",
         "url": "https://github.com/AiGromatics/MindPool.git"
@@ -29,7 +34,18 @@
     "keywords": [
         "ai",
         "skills",
+        "agent skills",
+        "ai skills",
+        "SKILL.md",
+        "claude",
+        "claude code",
+        "claude skills",
+        "copilot",
+        "cursor",
+        "codex",
+        "skill manager",
         "team",
+        "private",
         "git",
         "sync"
     ],
@@ -206,6 +222,8 @@
         "test:e2e": "node scripts/build.ts --e2e && node src/test/e2e/runE2E.ts",
         "test:all": "npm run typecheck && npm test && npm run test:e2e",
         "package": "vsce package --no-dependencies",
+        "publish:marketplace": "vsce publish --no-dependencies",
+        "publish:ovsx": "ovsx publish --no-dependencies",
         "bump:check": "node scripts/bump.ts",
         "bump": "node scripts/bump.ts --apply",
         "vscode:prepublish": "npm run typecheck && npm run build"
@@ -216,6 +234,7 @@
         "@vscode/test-electron": "^3.1.0",
         "@vscode/vsce": "^4.1.0",
         "esbuild": "^0.28.2",
+        "ovsx": "1.3.0",
         "typescript": "^7.0.2"
     }
 }

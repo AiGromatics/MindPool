@@ -7,7 +7,7 @@ import { MindPoolEngine } from './core/engine.ts';
 import { createGit, type GitExec } from './core/git.ts';
 import { inspectRemote } from './core/skillManager.ts';
 import type { HostCommand, HostToWebview, LogEntry, PoolState, SkillRefKind, SkillSpec, TrackedOperation, WebviewToHost } from './core/types.ts';
-import { expandFolderPath, isInside, isSafeName, repoNameFromUrl, validateGitUrl } from './core/validation.ts';
+import { expandFolderPath, isInside, isSafeName, repoNameFromUrl, settingTarget, validateGitUrl } from './core/validation.ts';
 
 interface Settings {
     poolFolder: string;
@@ -325,7 +325,14 @@ export class MindPoolController implements vscode.Disposable {
         if (!folder) {
             return;
         }
-        await vscode.workspace.getConfiguration('mindpool').update('poolFolder', folder.fsPath, vscode.ConfigurationTarget.Global);
+        const settings = vscode.workspace.getConfiguration('mindpool');
+        const inWorkspace = settingTarget(settings.inspect<string>('poolFolder')) === 'workspace';
+        await settings.update('poolFolder', folder.fsPath, inWorkspace ? vscode.ConfigurationTarget.Workspace : vscode.ConfigurationTarget.Global);
+        if (inWorkspace) {
+            void vscode.window.showInformationMessage(
+                "MindPool: the pool folder was saved in this workspace's settings, because they override mindpool.poolFolder from your user settings.",
+            );
+        }
         await vscode.commands.executeCommand('mindpool.dashboard.focus');
     }
 

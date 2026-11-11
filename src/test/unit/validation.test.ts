@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import * as path from 'node:path';
 import { describe, test } from 'node:test';
-import { expandFolderPath, isInside, isSafeName, repoNameFromUrl, validateGitUrl, validateRefName } from '../../VsCodeExtension/core/validation.ts';
+import { expandFolderPath, isInside, isSafeName, repoNameFromUrl, settingTarget, validateGitUrl, validateRefName } from '../../VsCodeExtension/core/validation.ts';
 
 describe('isSafeName', () => {
     test('accepts plain folder names', () => {
@@ -76,6 +76,19 @@ describe('expandFolderPath', () => {
     test('reports ${workspaceFolder} without an open folder, and empty values', () => {
         assert.match(expandFolderPath('${workspaceFolder}/x', { home: '/h' }).error ?? '', /no folder is open/);
         assert.deepEqual(expandFolderPath('   ', ctx), {});
+    });
+});
+
+describe('settingTarget', () => {
+    test('writes to the workspace when it overrides the user setting, even with ""', () => {
+        assert.equal(settingTarget({ workspaceValue: '' }), 'workspace');
+        assert.equal(settingTarget({ workspaceValue: '/team/pool' }), 'workspace');
+    });
+
+    test('writes to the user settings otherwise', () => {
+        assert.equal(settingTarget({ workspaceValue: undefined }), 'global');
+        assert.equal(settingTarget({}), 'global');
+        assert.equal(settingTarget(undefined), 'global');
     });
 });
 
